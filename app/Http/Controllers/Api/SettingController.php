@@ -26,8 +26,8 @@ class SettingController extends Controller
             'system_tagline' => $all['system_tagline'] ?? 'Human Resources',
             'logo_url' => ! empty($all['logo_path']) ? asset('storage/' . $all['logo_path']) : null,
             'theme_mode' => $all['theme_mode'] ?? 'light',
-            'theme_brand' => $all['theme_brand'] ?? '#2f6f5e',
-            'theme_amber' => $all['theme_amber'] ?? '#e0a458',
+            'theme_brand' => $all['theme_brand'] ?? '#d61b5d',
+            'theme_amber' => $all['theme_amber'] ?? '#e39a3b',
         ]);
     }
 

@@ -7,12 +7,13 @@ import { useTheme, THEME_PRESETS } from '@/context/ThemeContext';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { Field, Input } from '@/components/ui/Field';
 import { LoadingBlock } from '@/components/ui/States';
 
 export default function SystemSettings() {
     const { applyBranding, setTheme, setMode, reloadBranding } = useTheme();
-    const [form, setForm] = useState({ system_name: '', system_tagline: '', theme_brand: '#2f6f5e', theme_amber: '#e0a458', theme_mode: 'light' });
+    const [form, setForm] = useState({ system_name: '', system_tagline: '', theme_brand: '#d61b5d', theme_amber: '#e39a3b', theme_mode: 'light' });
     const [logo, setLogo] = useState(null);
     const [logoPreview, setLogoPreview] = useState(null);
 
@@ -22,7 +23,7 @@ export default function SystemSettings() {
         if (data) {
             setForm({
                 system_name: data.system_name ?? '', system_tagline: data.system_tagline ?? '',
-                theme_brand: data.theme_brand ?? '#2f6f5e', theme_amber: data.theme_amber ?? '#e0a458',
+                theme_brand: data.theme_brand ?? '#d61b5d', theme_amber: data.theme_amber ?? '#e39a3b',
                 theme_mode: data.theme_mode ?? 'light',
             });
             setLogoPreview(data.logo_url);
@@ -99,9 +100,7 @@ export default function SystemSettings() {
                                         <input type="file" accept="image/*" className="hidden" onChange={(e) => pickLogo(e.target.files?.[0] ?? null)} />
                                     </label>
                                     {logoPreview && (
-                                        <button onClick={() => removeLogo.mutate()} className="flex items-center gap-1.5 text-xs text-danger hover:underline">
-                                            <Trash2 className="h-3.5 w-3.5" /> Remove logo
-                                        </button>
+                                        <IconButton label="Remove logo" icon={Trash2} tone="danger" side="bottom" onClick={() => removeLogo.mutate()} />
                                     )}
                                 </div>
                             </div>

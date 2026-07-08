@@ -26,11 +26,21 @@ export function AuthProvider({ children }) {
         loadMe();
     }, [loadMe]);
 
-    const login = useCallback(async (email, password) => {
-        const { data } = await api.post('/login', { email, password, device_name: 'spa' });
+    // `identifier` is an email address or a username.
+    const login = useCallback(async (identifier, password) => {
+        const { data } = await api.post('/login', { login: identifier, password, device_name: 'spa' });
         setToken(data.token);
         setUser(data.user.data ?? data.user);
         return data.user.data ?? data.user;
+    }, []);
+
+    // Completes sign-in from an externally issued token (Google OAuth callback).
+    const loginWithToken = useCallback(async (token) => {
+        setToken(token);
+        const { data } = await api.get('/me');
+        const u = data.data ?? data;
+        setUser(u);
+        return u;
     }, []);
 
     const logout = useCallback(async () => {
@@ -55,7 +65,7 @@ export function AuthProvider({ children }) {
     );
 
     return (
-        <AuthContext.Provider value={{ user, setUser, loading, login, logout, can, refresh: loadMe }}>
+        <AuthContext.Provider value={{ user, setUser, loading, login, loginWithToken, logout, can, refresh: loadMe }}>
             {children}
         </AuthContext.Provider>
     );

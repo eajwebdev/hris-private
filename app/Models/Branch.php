@@ -56,4 +56,9 @@ class Branch extends Model
     {
         return $this->hasMany(BranchSetting::class);
     }
+
+    public function schedules(): HasMany
+    {
+        return $this->hasMany(WorkSchedule::class);
+    }
 }

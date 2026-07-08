@@ -1,6 +1,9 @@
 import { forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 
+// All <Select> across the app are searchable comboboxes (API-compatible drop-in).
+export { SearchSelect as Select } from './SearchSelect';
+
 export function Label({ className, ...props }) {
     return <label className={cn('block text-sm font-medium text-foreground mb-1.5', className)} {...props} />;
 }
@@ -17,13 +20,6 @@ export const Textarea = forwardRef(function Textarea({ className, rows = 4, ...p
     return <textarea ref={ref} rows={rows} className={cn(base, 'h-auto py-2.5', className)} {...props} />;
 });
 
-export const Select = forwardRef(function Select({ className, children, ...props }, ref) {
-    return (
-        <select ref={ref} className={cn(base, 'pr-8 appearance-none bg-no-repeat', className)} {...props}>
-            {children}
-        </select>
-    );
-});
 
 export function Field({ label, hint, error, children, className }) {
     return (

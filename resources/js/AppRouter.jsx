@@ -10,6 +10,19 @@ import OrgChart from '@/pages/employees/OrgChart';
 import AttendancePage from '@/pages/attendance/AttendancePage';
 import EventsCalendar from '@/pages/events/EventsCalendar';
 import SystemSettings from '@/pages/SystemSettings';
+import LeavePage from '@/pages/leave/LeavePage';
+import AnnouncementsPage from '@/pages/announcements/AnnouncementsPage';
+import PayrollPage from '@/pages/payroll/PayrollPage';
+import BranchesPage from '@/pages/branches/BranchesPage';
+import ServiceCreditsPage from '@/pages/service-credits/ServiceCreditsPage';
+import MyServiceCredits from '@/pages/ess/MyServiceCredits';
+import RecruitmentPage from '@/pages/recruitment/RecruitmentPage';
+import UsersPage from '@/pages/users/UsersPage';
+import BillingPage from '@/pages/billing/BillingPage';
+import CareersPortal from '@/pages/careers/CareersPortal';
+import CareersJob from '@/pages/careers/CareersJob';
+import MyLeave from '@/pages/ess/MyLeave';
+import MyPayslips from '@/pages/ess/MyPayslips';
 import { ESSLayout } from '@/layouts/ESSLayout';
 import ClockScreen from '@/pages/ess/ClockScreen';
 import EssDashboard from '@/pages/ess/EssDashboard';
@@ -41,16 +54,17 @@ export default function App() {
                 <Route path="employees/org-chart" element={<M module="employees"><OrgChart /></M>} />
                 <Route path="employees/:id" element={<M module="employees"><EmployeeDetail /></M>} />
                 <Route path="attendance" element={<M module="attendance"><AttendancePage /></M>} />
-                <Route path="leave" element={<M module="leave"><Placeholder title="Leave" /></M>} />
-                <Route path="service-credits" element={<M module="service_credits"><Placeholder title="Service Credits" /></M>} />
-                <Route path="recruitment" element={<M module="recruitment"><Placeholder title="Recruitment" /></M>} />
+                <Route path="leave" element={<M module="leave"><LeavePage /></M>} />
+                <Route path="service-credits" element={<M module="service_credits"><ServiceCreditsPage /></M>} />
+                <Route path="recruitment" element={<M module="recruitment"><RecruitmentPage /></M>} />
                 <Route path="events" element={<M module="events"><EventsCalendar /></M>} />
-                <Route path="announcements" element={<M module="announcements"><Placeholder title="Announcements" /></M>} />
+                <Route path="announcements" element={<M module="announcements"><AnnouncementsPage /></M>} />
                 <Route path="performance" element={<M module="performance"><Placeholder title="Performance" /></M>} />
-                <Route path="payroll" element={<M module="payroll"><Placeholder title="Payroll" /></M>} />
+                <Route path="payroll" element={<M module="payroll"><PayrollPage /></M>} />
                 <Route path="analytics" element={<M module="analytics"><Placeholder title="Analytics & Reports" /></M>} />
-                <Route path="branches" element={<M module="branches"><Placeholder title="Branches" /></M>} />
-                <Route path="billing" element={<M module="billing"><Placeholder title="Billing" /></M>} />
+                <Route path="branches" element={<M module="branches"><BranchesPage /></M>} />
+                <Route path="billing" element={<M module="billing"><BillingPage /></M>} />
+                <Route path="users" element={<M module="users"><UsersPage /></M>} />
                 <Route path="settings" element={<M module="settings"><SystemSettings /></M>} />
             </Route>
 
@@ -66,15 +80,16 @@ export default function App() {
                 <Route index element={<EssDashboard />} />
                 <Route path="clock" element={<ClockScreen />} />
                 <Route path="events" element={<EssEvents />} />
-                <Route path="leave" element={<Placeholder title="My Leave" subtitle="Coming in Phase 5" />} />
-                <Route path="credits" element={<Placeholder title="Service Credits" subtitle="Coming in Phase 5" />} />
-                <Route path="payslips" element={<Placeholder title="Payslips" subtitle="Coming in Phase 9" />} />
+                <Route path="leave" element={<MyLeave />} />
+                <Route path="credits" element={<MyServiceCredits />} />
+                <Route path="payslips" element={<MyPayslips />} />
                 <Route path="jobs" element={<Placeholder title="Internal Jobs" subtitle="Coming in Phase 6" />} />
                 <Route path="profile" element={<Placeholder title="My Profile" subtitle="Coming in Phase 8" />} />
             </Route>
 
             {/* Public careers portal (no auth) */}
-            <Route path="/careers/*" element={<Placeholder title="Careers" subtitle="Public job portal — Phase 6" />} />
+            <Route path="/careers" element={<CareersPortal />} />
+            <Route path="/careers/:slug" element={<CareersJob />} />
 
             <Route path="/" element={<Navigate to="/app" replace />} />
             <Route path="*" element={<Navigate to="/app" replace />} />

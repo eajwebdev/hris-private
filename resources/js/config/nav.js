@@ -1,6 +1,6 @@
 import {
     LayoutDashboard, Users, Clock, CalendarClock, Gift, Briefcase, CalendarDays,
-    Megaphone, Target, Wallet, BarChart3, Building2, Receipt, Settings, UserCircle,
+    Megaphone, Target, Wallet, BarChart3, Building2, Receipt, Settings, UserCircle, UserCog,
 } from 'lucide-react';
 
 /**
@@ -21,6 +21,7 @@ export const ADMIN_NAV = [
     { to: '/app/analytics', label: 'Analytics', icon: BarChart3, module: 'analytics' },
     { to: '/app/branches', label: 'Branches', icon: Building2, module: 'branches' },
     { to: '/app/billing', label: 'Billing', icon: Receipt, module: 'billing' },
+    { to: '/app/users', label: 'User Management', icon: UserCog, module: 'users' },
     { to: '/app/settings', label: 'Settings', icon: Settings, module: 'settings' },
 ];
 

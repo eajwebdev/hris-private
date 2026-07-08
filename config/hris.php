@@ -24,6 +24,7 @@ return [
         'analytics'       => ['label' => 'Analytics',       'abilities' => ['view', 'export']],
         'branches'        => ['label' => 'Branches',        'abilities' => ['view', 'create', 'edit', 'delete']],
         'billing'         => ['label' => 'Billing',         'abilities' => ['view', 'create', 'edit', 'delete', 'export']],
+        'users'           => ['label' => 'User Management', 'abilities' => ['view', 'create', 'edit', 'delete']],
         'settings'        => ['label' => 'Settings',        'abilities' => ['view', 'edit']],
     ],
 

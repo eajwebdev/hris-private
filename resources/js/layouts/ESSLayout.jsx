@@ -21,13 +21,24 @@ function Nav({ onNavigate }) {
                     onClick={onNavigate}
                     className={({ isActive }) =>
                         cn(
-                            'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+                            'relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
                             isActive ? 'bg-sidebar-active text-white' : 'text-sidebar-text hover:bg-sidebar-active/60 hover:text-white'
                         )
                     }
                 >
-                    <item.icon className="h-[18px] w-[18px]" />
-                    {item.label}
+                    {({ isActive }) => (
+                        <>
+                            {isActive && (
+                                <motion.span
+                                    layoutId="ess-nav-indicator"
+                                    className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-brand"
+                                    transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                                />
+                            )}
+                            <item.icon className={cn('h-[18px] w-[18px]', isActive && 'text-brand')} />
+                            {item.label}
+                        </>
+                    )}
                 </NavLink>
             ))}
         </nav>
@@ -45,6 +56,7 @@ export function ESSLayout() {
         <div className="min-h-full">
             <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-sidebar lg:flex">
                 <Brand subtitle="Self-Service" />
+                <div className="mx-6 mb-3 h-px bg-linear-to-r from-brand/50 via-white/10 to-transparent" />
                 <div className="flex-1 overflow-y-auto pb-6"><Nav /></div>
             </aside>
 

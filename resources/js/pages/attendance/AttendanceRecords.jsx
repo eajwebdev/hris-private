@@ -1,27 +1,34 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { CalendarClock } from 'lucide-react';
 import api from '@/lib/api';
 import { useBranches } from '@/hooks/useLookups';
+import { useServerPagination } from '@/hooks/usePagination';
 import { Card } from '@/components/ui/Card';
-import { Input, Select } from '@/components/ui/Field';
+import { Select } from '@/components/ui/Field';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { Badge } from '@/components/ui/Badge';
 import { Table, THead, TH, TBody, TR, TD } from '@/components/ui/Table';
+import { Pagination } from '@/components/ui/Pagination';
 import { LoadingBlock, EmptyState } from '@/components/ui/States';
-import { formatDate, formatTime } from '@/lib/utils';
+import { formatDate, formatTime, pageMeta } from '@/lib/utils';
+
+const PER_PAGE = 15;
 
 export default function AttendanceRecords() {
     const { data: branches } = useBranches();
     const [branchId, setBranchId] = useState('');
-    const [from, setFrom] = useState('');
-    const [to, setTo] = useState('');
+    const [range, setRange] = useState({ from: '', to: '' });
+    const { page, setPage } = useServerPagination(`${branchId}|${range.from}|${range.to}`);
 
     const { data, isLoading } = useQuery({
-        queryKey: ['attendance', 'records', { branchId, from, to }],
-        queryFn: async () => (await api.get('/attendance', { params: { branch_id: branchId, from, to, per_page: 50 } })).data,
+        queryKey: ['attendance', 'records', { branchId, range, page }],
+        queryFn: async () => (await api.get('/attendance', { params: { branch_id: branchId, from: range.from || undefined, to: range.to || undefined, per_page: PER_PAGE, page } })).data,
+        placeholderData: keepPreviousData,
     });
 
     const rows = data?.data ?? [];
+    const meta = pageMeta(data, PER_PAGE);
 
     return (
         <>
@@ -31,8 +38,7 @@ export default function AttendanceRecords() {
                         <option value="">All branches</option>
                         {branches?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                     </Select>
-                    <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="sm:w-44" />
-                    <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="sm:w-44" />
+                    <DateRangePicker value={range} onChange={setRange} maxDate={new Date()} className="sm:w-72" placeholder="All dates" />
                 </div>
             </Card>
 
@@ -42,6 +48,7 @@ export default function AttendanceRecords() {
                 ) : rows.length === 0 ? (
                     <EmptyState icon={CalendarClock} title="No records" message="Attendance rows will appear here as employees clock in and out." />
                 ) : (
+                    <>
                     <Table>
                         <THead>
                             <TH>Employee</TH>
@@ -81,6 +88,8 @@ export default function AttendanceRecords() {
                             ))}
                         </TBody>
                     </Table>
+                    <Pagination page={meta.page} lastPage={meta.lastPage} total={meta.total} perPage={meta.perPage} onPage={setPage} />
+                    </>
                 )}
             </Card>
         </>

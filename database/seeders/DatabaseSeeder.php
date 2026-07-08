@@ -85,13 +85,17 @@ class DatabaseSeeder extends Seeder
             'system_name' => 'EAJ HRIS',
             'system_tagline' => 'Human Resources',
             'theme_mode' => 'light',
-            'theme_brand' => '#2f6f5e',
-            'theme_amber' => '#e0a458',
+            'theme_brand' => '#d61b5d',
+            'theme_amber' => '#e39a3b',
         ]);
 
         // --- Demo employees ------------------------------------------------------
         $this->callWith(EmployeeSeeder::class, ['company' => $company, 'branches' => [$makati, $cebu], 'essUser' => $employee]);
         $this->call(AttendanceSeeder::class);
+        $this->call(LeaveSeeder::class);
+        $this->call(RecruitmentSeeder::class);
+        $this->call(BillingSeeder::class);
+        $this->call(ServiceCreditSeeder::class);
         $this->callWith(ContentSeeder::class, ['company' => $company, 'branches' => [$makati, $cebu], 'author' => $super]);
 
         $this->command->info('Seeded: admin@eaj.test / hr@eaj.test / employee@eaj.test — all password "password".');

@@ -34,3 +34,11 @@ export function useManagers(branchId) {
         staleTime: 60_000,
     });
 }
+
+export function useEmployeesLookup(branchId) {
+    return useQuery({
+        queryKey: ['lookup', 'employees', branchId],
+        queryFn: async () => (await api.get('/lookups/employees', { params: { branch_id: branchId } })).data,
+        staleTime: 60_000,
+    });
+}

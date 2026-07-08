@@ -43,4 +43,14 @@ class LookupController extends Controller
             ->get(['id', 'first_name', 'last_name'])
             ->map(fn ($e) => ['id' => $e->id, 'name' => $e->full_name]);
     }
+
+    /** All employees in scope (id + name + branch) for admin pickers. */
+    public function employees(Request $request)
+    {
+        return Employee::query()
+            ->when($request->filled('branch_id'), fn ($q) => $q->where('branch_id', $request->integer('branch_id')))
+            ->orderBy('last_name')
+            ->get(['id', 'first_name', 'last_name', 'branch_id', 'employee_no'])
+            ->map(fn ($e) => ['id' => $e->id, 'name' => $e->full_name, 'branch_id' => $e->branch_id, 'employee_no' => $e->employee_no]);
+    }
 }

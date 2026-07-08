@@ -47,8 +47,9 @@ class Setting extends Model
         return [
             'system_name' => $all['system_name'] ?? 'EAJ HRIS',
             'system_tagline' => $all['system_tagline'] ?? 'Human Resources',
-            'logo_url' => $logo ? asset('storage/' . $logo) : null,
+            'logo_url' => $logo ? asset('storage/' . $logo) : asset('logo2.png'),
             'mode' => $all['theme_mode'] ?? 'light',
+            'google_login' => (bool) config('services.google.client_id'),
             'vars' => [
                 'brand' => $all['theme_brand'] ?? null,
                 'amber' => $all['theme_amber'] ?? null,

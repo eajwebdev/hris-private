@@ -6,10 +6,11 @@ import api, { apiError } from '@/lib/api';
 import { useBranches } from '@/hooks/useLookups';
 import { Modal, ConfirmDialog } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { Field, Input, Textarea, Select } from '@/components/ui/Field';
 import { useAuth } from '@/context/AuthContext';
 
-const COLORS = ['#2f6f5e', '#5b7cfa', '#e0a458', '#d0454c', '#2f8f6b', '#7c3aed'];
+const COLORS = ['#d61b5d', '#0a1134', '#5b7cfa', '#e39a3b', '#1d9e6f', '#7c3aed'];
 
 function toLocalInput(iso) {
     if (!iso) return '';
@@ -80,9 +81,7 @@ export function EventForm({ open, onClose, event, defaultDate }) {
                     <div className="flex w-full items-center justify-between">
                         <div>
                             {isEdit && can('events', 'delete') && (
-                                <Button variant="ghost" className="text-danger" onClick={() => setConfirmDel(true)}>
-                                    <Trash2 className="h-4 w-4" /> Delete
-                                </Button>
+                                <IconButton label="Delete event" icon={Trash2} tone="danger" onClick={() => setConfirmDel(true)} />
                             )}
                         </div>
                         <div className="flex gap-2">

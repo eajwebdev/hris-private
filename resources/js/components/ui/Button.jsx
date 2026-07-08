@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 
 const variants = {
-    primary: 'bg-brand text-brand-ink hover:opacity-90 shadow-sm',
+    primary: 'brand-gradient text-brand-ink hover:brightness-110 shadow-sm shadow-brand/25',
     soft: 'bg-brand-soft text-brand hover:bg-brand-soft/70',
     outline: 'border border-border bg-surface text-foreground hover:bg-surface-2',
     ghost: 'text-foreground hover:bg-surface-2',
@@ -21,7 +21,7 @@ export function Button({ variant = 'primary', size = 'md', className, loading, c
     return (
         <button
             className={cn(
-                'inline-flex items-center justify-center font-medium transition-colors',
+                'inline-flex items-center justify-center font-medium transition-all active:scale-[0.98]',
                 'disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-2',
                 variants[variant],
                 sizes[size],

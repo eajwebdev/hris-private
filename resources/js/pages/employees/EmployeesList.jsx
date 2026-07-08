@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Eye, Pencil, Trash2, Users, Network } from 'lucide-react';
 import { toast } from 'sonner';
 import api, { apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useBranches } from '@/hooks/useLookups';
+import { useServerPagination } from '@/hooks/usePagination';
+import { pageMeta } from '@/lib/utils';
 import { PageHeader } from '@/components/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -13,10 +15,13 @@ import { Input, Select } from '@/components/ui/Field';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge, statusTone } from '@/components/ui/Badge';
 import { Table, THead, TH, TBody, TR, TD } from '@/components/ui/Table';
+import { Pagination } from '@/components/ui/Pagination';
 import { IconButton } from '@/components/ui/IconButton';
 import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/States';
 import { ConfirmDialog } from '@/components/ui/Modal';
 import { EmployeeForm } from './EmployeeForm';
+
+const PER_PAGE = 15;
 
 export default function EmployeesList() {
     const { can } = useAuth();
@@ -31,10 +36,13 @@ export default function EmployeesList() {
     const [editing, setEditing] = useState(null);
     const [deleting, setDeleting] = useState(null);
 
+    const { page, setPage } = useServerPagination(`${search}|${branchId}|${status}`);
+
     const { data, isLoading, isError, refetch } = useQuery({
-        queryKey: ['employees', { search, branchId, status }],
+        queryKey: ['employees', { search, branchId, status, page }],
         queryFn: async () =>
-            (await api.get('/employees', { params: { search, branch_id: branchId, status, per_page: 50 } })).data,
+            (await api.get('/employees', { params: { search, branch_id: branchId, status, per_page: PER_PAGE, page } })).data,
+        placeholderData: keepPreviousData,
     });
 
     const removeMut = useMutation({
@@ -48,6 +56,7 @@ export default function EmployeesList() {
     });
 
     const rows = data?.data ?? [];
+    const meta = pageMeta(data, PER_PAGE);
 
     return (
         <>
@@ -100,6 +109,7 @@ export default function EmployeesList() {
                         action={can('employees', 'create') && <Button onClick={() => setFormOpen(true)}><Plus className="h-4 w-4" /> Add employee</Button>}
                     />
                 ) : (
+                    <>
                     <Table>
                         <THead>
                             <TH>Employee</TH>
@@ -127,10 +137,10 @@ export default function EmployeesList() {
                                         <div className="flex items-center justify-end gap-0.5">
                                             <IconButton label="View" icon={Eye} onClick={() => navigate(`/app/employees/${e.id}`)} />
                                             {can('employees', 'edit') && (
-                                                <IconButton label="Edit" icon={Pencil} onClick={() => { setEditing(e); setFormOpen(true); }} />
+                                                <IconButton label="Edit" icon={Pencil} tone="brand" onClick={() => { setEditing(e); setFormOpen(true); }} />
                                             )}
                                             {can('employees', 'delete') && (
-                                                <IconButton label="Archive" icon={Trash2} onClick={() => setDeleting(e)} />
+                                                <IconButton label="Archive" icon={Trash2} tone="danger" onClick={() => setDeleting(e)} />
                                             )}
                                         </div>
                                     </TD>
@@ -138,6 +148,8 @@ export default function EmployeesList() {
                             ))}
                         </TBody>
                     </Table>
+                    <Pagination page={meta.page} lastPage={meta.lastPage} total={meta.total} perPage={meta.perPage} onPage={setPage} />
+                    </>
                 )}
             </Card>
 

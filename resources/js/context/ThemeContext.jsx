@@ -6,6 +6,7 @@ const ThemeContext = createContext(null);
 const MODE_KEY = 'eaj_hris_mode';
 
 export const THEME_PRESETS = {
+    EAJ: { brand: '#d61b5d', amber: '#e39a3b' },
     Meridian: { brand: '#2f6f5e', amber: '#e0a458' },
     Midnight: { brand: '#5b7cfa', amber: '#f0b000' },
     Clean: { brand: '#111827', amber: '#d97706' },
@@ -23,7 +24,7 @@ export function ThemeProvider({ children }) {
     const [mode, setMode] = useState(() => localStorage.getItem(MODE_KEY) || 'light');
     const [theme, setThemeState] = useState({});
     // Branding is loaded from the DB so name + logo reflect app-wide instantly.
-    const [branding, setBranding] = useState({ system_name: 'EAJ HRIS', system_tagline: 'Human Resources', logo_url: null });
+    const [branding, setBranding] = useState({ system_name: 'EAJ HRIS', system_tagline: 'Human Resources', logo_url: '/logo2.png' });
 
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', mode);
@@ -34,7 +35,7 @@ export function ThemeProvider({ children }) {
         return api.get('/meta/branding')
             .then(({ data }) => {
                 if (data?.system_name) {
-                    setBranding({ system_name: data.system_name, system_tagline: data.system_tagline, logo_url: data.logo_url });
+                    setBranding({ system_name: data.system_name, system_tagline: data.system_tagline, logo_url: data.logo_url || '/logo2.png', google_login: !!data.google_login });
                     document.title = data.system_name;
                 }
                 if (data?.mode) setMode(data.mode);

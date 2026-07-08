@@ -16,12 +16,17 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'email' => ['required', 'email'],
+            // `login` accepts an email address or a username ("email" kept for backward-compat).
+            'login' => ['required_without:email', 'string'],
+            'email' => ['required_without:login', 'string'],
             'password' => ['required', 'string'],
             'device_name' => ['nullable', 'string'],
         ]);
 
-        $user = User::where('email', $data['email'])->first();
+        $identifier = $data['login'] ?? $data['email'];
+        $user = User::where('email', $identifier)
+            ->orWhere('username', $identifier)
+            ->first();
 
         if (! $user || ! Hash::check($data['password'], $user->password)) {
             throw ValidationException::withMessages([

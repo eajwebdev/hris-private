@@ -67,6 +67,23 @@ class Attendance extends Model
         return $pairs;
     }
 
+    /**
+     * Daily Time Record view — the four checkpoints mapped by punch order:
+     * 1st in → AM IN, 1st out → AM OUT, 2nd in → PM IN, 2nd out → PM OUT.
+     */
+    public function getDtrAttribute(): array
+    {
+        $ins = $this->split($this->clock_ins);
+        $outs = $this->split($this->clock_outs);
+
+        return [
+            'am_in' => $ins[0] ?? null,
+            'am_out' => $outs[0] ?? null,
+            'pm_in' => $ins[1] ?? null,
+            'pm_out' => $outs[1] ?? null,
+        ];
+    }
+
     /** The next sensible action for the employee today. */
     public function getNextActionAttribute(): string
     {

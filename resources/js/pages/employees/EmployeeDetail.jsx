@@ -57,7 +57,12 @@ export default function EmployeeDetail() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {/* Identity card */}
                 <Card className="lg:col-span-1 h-fit">
-                    <CardBody className="flex flex-col items-center text-center">
+                    <CardBody className="relative flex flex-col items-center text-center">
+                        {can('employees', 'edit') && (
+                            <div className="absolute right-3 top-3">
+                                <IconButton label="Edit profile" icon={Pencil} tone="brand" onClick={() => setEditOpen(true)} />
+                            </div>
+                        )}
                         <Avatar name={e.full_name} src={e.photo_url} size="lg" className="h-24 w-24 text-2xl" />
                         <h2 className="mt-4 text-xl font-semibold font-display">{e.full_name}</h2>
                         <p className="text-sm text-muted">{e.position?.title ?? 'No position'}</p>
@@ -75,9 +80,6 @@ export default function EmployeeDetail() {
                         </div>
 
                         <div className="mt-5 flex w-full flex-col gap-2">
-                            {can('employees', 'edit') && (
-                                <Button variant="outline" onClick={() => setEditOpen(true)}><Pencil className="h-4 w-4" /> Edit</Button>
-                            )}
                             {can('employees', 'create') && !e.has_login && (
                                 <Button variant="soft" onClick={() => provisionMut.mutate()} loading={provisionMut.isPending}>
                                     <KeyRound className="h-4 w-4" /> Create ESS login
@@ -192,7 +194,7 @@ function Documents({ employee, canEdit, onUpload, onChanged }) {
                                 <a href={d.url} target="_blank" rel="noreferrer" className="block truncate text-sm font-medium hover:text-brand">{d.name}</a>
                                 <p className="text-xs text-muted">{d.category || 'Document'}</p>
                             </div>
-                            {canEdit && <IconButton label="Delete" icon={Trash2} onClick={() => del.mutate(d.id)} />}
+                            {canEdit && <IconButton label="Delete" icon={Trash2} tone="danger" onClick={() => del.mutate(d.id)} />}
                         </div>
                     ))}
                 </div>

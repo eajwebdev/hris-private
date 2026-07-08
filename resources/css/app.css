@@ -6,46 +6,52 @@
 
 /*
 |--------------------------------------------------------------------------
-| Meridian — default theme
+| EAJ — default theme (derived from the EAJ logo)
 |--------------------------------------------------------------------------
+| Palette sampled from public/logo1.jpg + logo2.png:
+|   navy #0a1134 · crimson #d61b5d · white
 | All colours are driven by CSS variables so a theme change (stored in the
 | DB, injected at runtime by useTheme) repaints the whole app with no rebuild.
 | Values are raw hex; Tailwind tokens below map onto them.
 */
 :root {
-    --ink: #141a24;        /* primary dark surface / sidebar */
-    --slate: #1e2733;      /* raised dark panels */
-    --mist: #f5f7fa;       /* app background (light) */
+    --ink: #0a1134;        /* logo navy — primary dark surface / sidebar */
+    --slate: #141c4a;      /* raised dark panels */
+    --mist: #f6f7fb;       /* app background (light, navy-tinted) */
     --surface: #ffffff;    /* cards */
-    --surface-2: #f0f3f7;  /* subtle raised */
-    --brand: #2f6f5e;      /* deep pine — primary accent / CTAs */
-    --brand-soft: #e7f1ee; /* accent tint */
+    --surface-2: #eff1f8;  /* subtle raised */
+    --brand: #d61b5d;      /* logo crimson — primary accent / CTAs */
+    --brand-soft: #fbe9f0; /* accent tint */
     --brand-ink: #ffffff;  /* text on brand */
-    --amber: #e0a458;      /* attention / pending */
-    --danger: #d0454c;     /* destructive */
-    --success: #2f8f6b;
-    --ink-text: #141a24;   /* primary text on light */
-    --muted: #5b6672;      /* secondary text */
-    --border: #e2e7ee;     /* hairline dividers */
-    --ring: #2f6f5e;
+    --amber: #e39a3b;      /* attention / pending */
+    --danger: #c92a2a;     /* destructive (pure red, distinct from brand) */
+    --success: #1d9e6f;
+    --ink-text: #141834;   /* primary text on light */
+    --muted: #5e6584;      /* secondary text (navy-gray) */
+    --border: #e3e6f0;     /* hairline dividers */
+    --ring: #d61b5d;
 
     --sidebar: var(--ink);
-    --sidebar-text: #c7d0dc;
-    --sidebar-active: #223042;
+    --sidebar-text: #a8b0d4;
+    --sidebar-active: #191f4e;
+
+    /* Chart series (CVD-validated against light/dark surfaces). */
+    --chart-late: #b06f1d;
 }
 
 /* Dark base — overrides the surfaces; brand/accent can still be re-themed. */
 :root[data-theme='dark'] {
-    --mist: #0f141b;
-    --surface: #1a222d;
-    --surface-2: #212c3a;
-    --brand-soft: #17322a;
-    --ink-text: #eef2f7;
-    --muted: #93a1b3;
-    --border: #2a3644;
-    --sidebar: #0c1119;
-    --sidebar-text: #aab6c6;
-    --sidebar-active: #1a2432;
+    --mist: #0a0e24;
+    --surface: #111634;
+    --surface-2: #181e42;
+    --brand-soft: #39122b;
+    --ink-text: #edeffa;
+    --muted: #939ec4;
+    --border: #252c55;
+    --sidebar: #070b1e;
+    --sidebar-text: #99a2cc;
+    --sidebar-active: #171d45;
+    --chart-late: #c98424;
 }
 
 @theme inline {
@@ -104,8 +110,37 @@
     background-color: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-2xl);
-    box-shadow: 0 1px 2px rgba(20, 26, 36, 0.04), 0 8px 24px -12px rgba(20, 26, 36, 0.12);
+    box-shadow: 0 1px 2px rgba(10, 17, 52, 0.04), 0 8px 24px -12px rgba(10, 17, 52, 0.12);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
+.card-hover:hover {
+    box-shadow: 0 2px 4px rgba(10, 17, 52, 0.06), 0 16px 32px -12px rgba(10, 17, 52, 0.18);
+    transform: translateY(-2px);
+}
+
+/* Brand gradient — crimson sweep used for CTAs and hero accents. */
+.brand-gradient {
+    background-image: linear-gradient(135deg, var(--brand) 0%, color-mix(in srgb, var(--brand) 78%, #7a1240) 100%);
+}
+.text-gradient {
+    background-image: linear-gradient(120deg, var(--brand), color-mix(in srgb, var(--brand) 55%, #ffffff));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+/* Slim themed scrollbars (WebKit + Firefox). */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--muted) 35%, transparent) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--muted) 35%, transparent);
+    border-radius: 8px;
+}
+*::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--muted) 55%, transparent); }
 
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
