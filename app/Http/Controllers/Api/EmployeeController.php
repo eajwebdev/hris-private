@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\Auditor;
 use App\Http\Requests\EmployeeRequest;
 use App\Http\Resources\EmployeeResource;
 use App\Models\Employee;
@@ -67,6 +68,8 @@ class EmployeeController extends Controller
 
         $employee = Employee::create($data);
 
+        Auditor::record('employees', 'created', "Added employee {$employee->full_name}.", $employee);
+
         return (new EmployeeResource($employee->load(['branch', 'department', 'position'])))
             ->response()->setStatusCode(201);
     }
@@ -87,7 +90,10 @@ class EmployeeController extends Controller
             $data['photo_path'] = $request->file('photo')->store("employees/{$employee->branch_id}", 'public');
         }
 
+        $before = Auditor::before($employee);
         $employee->update($data);
+
+        Auditor::record('employees', 'updated', "Updated employee {$employee->full_name}.", $employee, Auditor::diff($employee, $before));
 
         return new EmployeeResource($employee->load(['branch', 'department', 'position']));
     }
@@ -95,6 +101,8 @@ class EmployeeController extends Controller
     public function destroy(Request $request, Employee $employee): JsonResponse
     {
         abort_unless($request->user()->canModule('employees', 'delete'), 403);
+        Auditor::record('employees', 'deleted', "Archived employee {$employee->full_name}.", $employee);
+
         $employee->delete();
 
         return response()->json(['message' => 'Employee archived.']);
@@ -125,6 +133,8 @@ class EmployeeController extends Controller
         ]);
         $user->branches()->sync([$employee->branch_id]);
         $employee->update(['user_id' => $user->id]);
+
+        Auditor::record('employees', 'created', "Provisioned an ESS login for {$employee->full_name} ({$employee->email}).", $employee);
 
         // MAIL_MAILER=log in dev — the credential mail lands in the log.
         // TODO(prod): queue a real Mailable with a reset-on-first-login link.

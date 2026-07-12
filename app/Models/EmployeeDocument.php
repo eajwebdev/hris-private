@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\PrivateFile;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -11,9 +12,10 @@ class EmployeeDocument extends Model
 
     protected $appends = ['url'];
 
-    public function getUrlAttribute(): string
+    /** Short-lived signed link — these live on the private disk, not public/storage. */
+    public function getUrlAttribute(): ?string
     {
-        return asset('storage/' . $this->path);
+        return PrivateFile::url($this->path);
     }
 
     public function employee(): BelongsTo

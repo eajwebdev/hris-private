@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
     Clock, CalendarDays, MapPin, LogIn, ArrowRight, Eye,
-    AlarmClockOff, DoorOpen, Hourglass, CalendarCheck2, Timer, Sunrise, Sunset, Megaphone, Pin,
+    AlarmClockOff, DoorOpen, Hourglass, CalendarCheck2, Timer, Sunrise, Sunset, Megaphone, Pin, Check,
 } from 'lucide-react';
-import api from '@/lib/api';
+import { toast } from 'sonner';
+import api, { apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -67,6 +68,13 @@ export default function EssDashboard() {
     const { data: summary } = useQuery({ queryKey: ['dashboard', 'ess'], queryFn: async () => (await api.get('/dashboard/ess')).data });
     const { data: events } = useQuery({ queryKey: ['events', 'feed'], queryFn: async () => (await api.get('/events/feed', { params: { limit: 6 } })).data });
     const { data: news } = useQuery({ queryKey: ['announcements', 'feed'], queryFn: async () => (await api.get('/announcements/feed', { params: { limit: 5 } })).data });
+
+    const qc = useQueryClient();
+    const markRead = useMutation({
+        mutationFn: (id) => api.post(`/announcements/${id}/read`),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['announcements'] }),
+        onError: (err) => toast.error(apiError(err)),
+    });
 
     const emp = summary?.employee;
     const today = summary?.today ?? { next_action: 'in', worked_hours: 0, punches: [], late_minutes: 0, early_out_minutes: 0, undertime_minutes: 0 };
@@ -255,18 +263,40 @@ export default function EssDashboard() {
                         </h2>
                         <div className="space-y-3">
                             {news.data.map((a) => (
-                                <div key={a.id} className="rounded-xl border border-border p-3.5">
+                                <div
+                                    key={a.id}
+                                    className={cn(
+                                        'rounded-xl border p-3.5 transition-colors',
+                                        a.is_read ? 'border-border' : 'border-brand/40 bg-brand-soft/30'
+                                    )}
+                                >
                                     <div className="flex flex-wrap items-center gap-2">
                                         {a.is_pinned && <Pin className="h-3.5 w-3.5 text-amber" />}
                                         <p className="font-medium">{a.title}</p>
                                         {a.priority !== 'normal' && (
                                             <Badge tone={a.priority === 'urgent' ? 'danger' : 'amber'} className="capitalize">{a.priority}</Badge>
                                         )}
+                                        {!a.is_read && <Badge tone="brand">New</Badge>}
                                     </div>
                                     <p className="mt-1 whitespace-pre-line text-sm text-muted">{a.body}</p>
-                                    <p className="mt-1.5 text-xs text-muted">
-                                        {format(parseISO(a.published_at), 'MMM d, yyyy')} · {a.branch ?? 'All branches'}{a.created_by && ` · ${a.created_by}`}
-                                    </p>
+
+                                    <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                                        <p className="text-xs text-muted">
+                                            {format(parseISO(a.published_at), 'MMM d, yyyy')} · {a.branch ?? 'All branches'}{a.created_by && ` · ${a.created_by}`}
+                                        </p>
+
+                                        {a.is_read ? (
+                                            <span className="flex items-center gap-1 text-xs text-success">
+                                                <Check className="h-3.5 w-3.5" /> Read
+                                            </span>
+                                        ) : (
+                                            <Button size="sm" variant="outline"
+                                                onClick={() => markRead.mutate(a.id)}
+                                                loading={markRead.isPending && markRead.variables === a.id}>
+                                                <Check className="h-3.5 w-3.5" /> Mark as read
+                                            </Button>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>

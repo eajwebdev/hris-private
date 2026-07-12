@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import api, { setToken, getToken } from '@/lib/api';
+import api, { csrf } from '@/lib/api';
 
 const AuthContext = createContext(null);
 
@@ -7,16 +7,20 @@ export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    /*
+     * There is no client-readable credential to check any more — the session lives in an
+     * httpOnly cookie. So we simply ask the server who we are; a 401 means "nobody".
+     * Returns the user (or null), which the OAuth landing on Login.jsx relies on.
+     */
     const loadMe = useCallback(async () => {
-        if (!getToken()) {
-            setLoading(false);
-            return;
-        }
         try {
             const { data } = await api.get('/me');
-            setUser(data.data ?? data);
+            const u = data.data ?? data;
+            setUser(u);
+            return u;
         } catch {
-            setToken(null);
+            setUser(null);
+            return null;
         } finally {
             setLoading(false);
         }
@@ -28,17 +32,9 @@ export function AuthProvider({ children }) {
 
     // `identifier` is an email address or a username.
     const login = useCallback(async (identifier, password) => {
-        const { data } = await api.post('/login', { login: identifier, password, device_name: 'spa' });
-        setToken(data.token);
-        setUser(data.user.data ?? data.user);
-        return data.user.data ?? data.user;
-    }, []);
-
-    // Completes sign-in from an externally issued token (Google OAuth callback).
-    const loginWithToken = useCallback(async (token) => {
-        setToken(token);
-        const { data } = await api.get('/me');
-        const u = data.data ?? data;
+        await csrf(); // must precede the first stateful write of the session
+        const { data } = await api.post('/login', { login: identifier, password });
+        const u = data.user.data ?? data.user;
         setUser(u);
         return u;
     }, []);
@@ -49,7 +45,6 @@ export function AuthProvider({ children }) {
         } catch {
             /* ignore */
         }
-        setToken(null);
         setUser(null);
         window.location.href = '/login';
     }, []);
@@ -65,7 +60,7 @@ export function AuthProvider({ children }) {
     );
 
     return (
-        <AuthContext.Provider value={{ user, setUser, loading, login, loginWithToken, logout, can, refresh: loadMe }}>
+        <AuthContext.Provider value={{ user, setUser, loading, login, logout, can, refresh: loadMe }}>
             {children}
         </AuthContext.Provider>
     );

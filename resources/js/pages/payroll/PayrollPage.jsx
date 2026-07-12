@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Wallet, Trash2, RefreshCw, Lock, Eye, ArrowLeft } from 'lucide-react';
-import api, { apiError } from '@/lib/api';
+import { Plus, Wallet, Trash2, RefreshCw, Lock, Eye, ArrowLeft, FileText, SlidersHorizontal, Pencil } from 'lucide-react';
+import api, { apiError, openBlob } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useBranches } from '@/hooks/useLookups';
 import { useClientPagination } from '@/hooks/usePagination';
@@ -18,6 +18,7 @@ import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { Table, THead, TH, TBody, TR, TD } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { LoadingBlock, EmptyState } from '@/components/ui/States';
+import { PayrollComponents } from './PayrollComponents';
 import { formatDate, peso, minutesLabel } from '@/lib/utils';
 
 function RunForm({ open, onClose }) {
@@ -97,7 +98,9 @@ function PeriodDetail({ periodId, onBack }) {
     if (isLoading || !period) return <LoadingBlock label="Loading payroll…" />;
 
     const totals = slips.reduce((t, s) => ({
-        gross: t.gross + s.gross_pay, ded: t.ded + s.late_deduction, net: t.net + s.net_pay,
+        gross: t.gross + s.gross_pay + s.total_earnings,
+        ded: t.ded + s.total_deductions,
+        net: t.net + s.net_pay,
     }), { gross: 0, ded: 0, net: 0 });
 
     return (
@@ -144,8 +147,10 @@ function PeriodDetail({ periodId, onBack }) {
                             <TH className="text-right hidden sm:table-cell">Leave/SC</TH>
                             <TH className="text-right hidden md:table-cell">Late/UT</TH>
                             <TH className="text-right">Gross</TH>
-                            <TH className="text-right hidden sm:table-cell">Deduction</TH>
+                            <TH className="text-right hidden lg:table-cell">Earnings</TH>
+                            <TH className="text-right hidden sm:table-cell">Deductions</TH>
                             <TH className="text-right">Net</TH>
+                            <TH className="text-right">Payslip</TH>
                         </THead>
                         <TBody>
                             {slipPage.slice.map((s) => (
@@ -167,10 +172,21 @@ function PeriodDetail({ periodId, onBack }) {
                                             : <span className="text-muted">—</span>}
                                     </TD>
                                     <TD className="text-right tabular">{peso(s.gross_pay)}</TD>
+                                    <TD className="text-right tabular hidden lg:table-cell">
+                                        {s.total_earnings > 0 ? <span className="text-success">+{peso(s.total_earnings)}</span> : '—'}
+                                    </TD>
                                     <TD className="text-right tabular hidden sm:table-cell">
-                                        {s.late_deduction > 0 ? <span className="text-danger">−{peso(s.late_deduction)}</span> : '—'}
+                                        {s.total_deductions > 0 ? <span className="text-danger">−{peso(s.total_deductions)}</span> : '—'}
                                     </TD>
                                     <TD className="text-right tabular font-semibold">{peso(s.net_pay)}</TD>
+                                    <TD className="text-right">
+                                        <IconButton
+                                            label="View payslip PDF"
+                                            icon={FileText}
+                                            onClick={() => openBlob(`/payroll/payslips/${s.id}/pdf`)
+                                                .catch((err) => toast.error(apiError(err, 'We couldn’t open that payslip.')))}
+                                        />
+                                    </TD>
                                 </TR>
                             ))}
                         </TBody>
@@ -193,6 +209,7 @@ export default function PayrollPage() {
     const [runOpen, setRunOpen] = useState(false);
     const [viewing, setViewing] = useState(null);
     const [deleting, setDeleting] = useState(null);
+    const [tab, setTab] = useState('runs');
 
     const { data, isLoading } = useQuery({
         queryKey: ['payroll', 'periods'],
@@ -210,14 +227,36 @@ export default function PayrollPage() {
 
     if (viewing) return <PeriodDetail periodId={viewing} onBack={() => setViewing(null)} />;
 
+    const tabs = [
+        { key: 'runs', label: 'Payroll runs', icon: Wallet },
+        { key: 'components', label: 'Salary components', icon: SlidersHorizontal },
+    ];
+
     return (
         <>
             <PageHeader title="Payroll" subtitle="Runs computed from attendance, exact late minutes and approved paid leave."
-                actions={can('payroll', 'create') && (
+                actions={tab === 'runs' && can('payroll', 'create') && (
                     <Button onClick={() => setRunOpen(true)}><Plus className="h-4 w-4" /> Run payroll</Button>
                 )} />
 
-            {isLoading ? <LoadingBlock /> : periods.length === 0 ? (
+            {/* Runs vs the earning/deduction columns that feed them */}
+            <div className="mb-4 flex gap-1 border-b border-border">
+                {tabs.map((t) => (
+                    <button
+                        key={t.key}
+                        onClick={() => setTab(t.key)}
+                        className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                            tab === t.key
+                                ? 'border-brand text-brand'
+                                : 'border-transparent text-muted hover:text-foreground'
+                        }`}
+                    >
+                        <t.icon className="h-4 w-4" /> {t.label}
+                    </button>
+                ))}
+            </div>
+
+            {tab === 'components' ? <PayrollComponents /> : isLoading ? <LoadingBlock /> : periods.length === 0 ? (
                 <EmptyState icon={Wallet} title="No payroll runs yet" message="Generate your first run — it computes from attendance automatically." />
             ) : (
                 <Card>

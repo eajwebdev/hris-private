@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import {
     Plus, Pencil, Trash2, Briefcase, Users, ClipboardList, ExternalLink,
-    FileText, GripVertical, Star, X,
+    FileText, GripVertical, Star, X, LayoutGrid,
 } from 'lucide-react';
 import api, { apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -22,6 +22,7 @@ import { Table, THead, TH, TBody, TR, TD } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { LoadingBlock, EmptyState } from '@/components/ui/States';
 import { formatDate, cn, pageMeta } from '@/lib/utils';
+import { RecruitmentPipeline } from './RecruitmentPipeline';
 
 const EMPLOYMENT = { full_time: 'Full-time', part_time: 'Part-time', contract: 'Contract', internship: 'Internship' };
 const OPENING_TONE = { open: 'success', draft: 'amber', closed: 'neutral' };
@@ -273,7 +274,7 @@ export default function RecruitmentPage() {
 
             {/* Tabs */}
             <div className="mb-4 flex items-center gap-1 rounded-xl bg-surface-2 p-1 w-fit">
-                {[['openings', 'Openings', Briefcase], ['applications', 'Applications', ClipboardList]].map(([key, label, Icon]) => (
+                {[['openings', 'Openings', Briefcase], ['pipeline', 'Pipeline', LayoutGrid], ['applications', 'Applications', ClipboardList]].map(([key, label, Icon]) => (
                     <button key={key} onClick={() => setTab(key)}
                         className={cn('flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors',
                             tab === key ? 'bg-surface shadow-sm text-foreground' : 'text-muted hover:text-foreground')}>
@@ -321,6 +322,8 @@ export default function RecruitmentPage() {
                     </div>
                 )
             )}
+
+            {tab === 'pipeline' && <RecruitmentPipeline openingId={appOpening || undefined} />}
 
             {tab === 'applications' && (
                 <Card>

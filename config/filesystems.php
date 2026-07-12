@@ -38,6 +38,23 @@ return [
             'report' => false,
         ],
 
+        /*
+         * Sensitive uploads — 201 documents, resumes, medical certificates, punch
+         * photos. Never web-served: reachable only through the signed, expiring
+         * route in FileController. See App\Support\PrivateFile.
+         */
+        'private' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private'),
+            'visibility' => 'private',
+            'throw' => false,
+            'report' => false,
+        ],
+
+        /*
+         * Deliberately world-readable, served straight off public/storage: employee
+         * avatars and the tenant's branding logo. Nothing confidential goes here.
+         */
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

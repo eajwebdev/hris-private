@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { AtSign, Lock } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Button } from '@/components/ui/Button';
-import { Field, Input } from '@/components/ui/Field';
+import { FloatingInput } from '@/components/ui/FloatingInput';
+import AuthBackground from '@/components/AuthBackground';
 import { apiError } from '@/lib/api';
 
 /** Official multi-color Google "G". */
@@ -28,7 +30,7 @@ function homeFor(user) {
 }
 
 export default function Login() {
-    const { login, loginWithToken } = useAuth();
+    const { login, refresh } = useAuth();
     const { branding } = useTheme();
     const navigate = useNavigate();
     const [params, setParams] = useSearchParams();
@@ -40,28 +42,34 @@ export default function Login() {
     const [error, setError] = useState('');
     const consumedRef = useRef(false);
 
-    // Complete Google sign-in (?token=...) or surface its error (?error=...).
+    /*
+     * Land from the Google callback. It signs us into the session server-side, so there is
+     * no credential to pick out of the URL — we just ask the server who we now are.
+     * `?error=` carries a rejection (unknown email, deactivated account) back to the user.
+     */
     useEffect(() => {
-        const token = params.get('token');
+        const oauth = params.get('oauth');
         const oauthError = params.get('error');
-        if (!token && !oauthError) return;
+        if (!oauth && !oauthError) return;
         if (consumedRef.current) return;
         consumedRef.current = true;
-        setParams({}, { replace: true }); // scrub the token from the URL/history
+        setParams({}, { replace: true });
 
         if (oauthError) {
             setError(oauthError);
             return;
         }
+
         setGoogleLoading(true);
-        loginWithToken(token)
+        refresh()
             .then((user) => {
+                if (!user) throw new Error('no session');
                 toast.success(`Welcome back, ${user.name.split(' ')[0]}`);
                 navigate(homeFor(user));
             })
             .catch(() => setError('Google sign-in could not be completed. Please try again.'))
             .finally(() => setGoogleLoading(false));
-    }, [params, setParams, loginWithToken, navigate]);
+    }, [params, setParams, refresh, navigate]);
 
     async function submit(e) {
         e.preventDefault();
@@ -79,77 +87,85 @@ export default function Login() {
     }
 
     return (
-        <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-ink p-4 sm:p-6">
-            {/* Ambient brand glows + dot grid */}
-            <div className="absolute -right-32 -top-32 h-[28rem] w-[28rem] rounded-full bg-brand/25 blur-3xl" />
-            <div className="absolute -left-24 bottom-0 h-80 w-80 rounded-full bg-brand/10 blur-3xl" />
-            <div className="absolute inset-0 opacity-[0.05]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '28px 28px' }} />
+        <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-ink p-5">
+            <AuthBackground />
 
             <motion.div
-                initial={{ opacity: 0, y: 20, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.45, ease: 'easeOut' }}
-                className="relative w-full max-w-md"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                className="relative w-full max-w-[25rem]"
             >
-                <div className="card-surface p-6 sm:p-10">
-                    {/* Brand */}
+                <div className="auth-card p-7 text-foreground sm:p-9">
                     <div className="flex flex-col items-center text-center">
-                        <motion.img
+                        <img
                             src={branding.logo_url || '/logo2.png'}
-                            alt={branding.system_name}
-                            initial={{ scale: 0.85, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            transition={{ delay: 0.15, duration: 0.4 }}
-                            className="h-20 w-20 rounded-full shadow-[0_0_44px_-8px_rgba(214,27,93,0.55)] ring-1 ring-border"
+                            alt=""
+                            className="h-14 w-14 rounded-2xl ring-1 ring-border"
                         />
-                        <h1 className="mt-4 font-display text-2xl font-bold">{branding.system_name}</h1>
-                        <p className="mt-1 text-sm text-muted">{branding.system_tagline ?? 'Sign in to continue'}</p>
+                        <h1 className="mt-5 font-display text-2xl font-bold tracking-tight">
+                            {branding.system_name}
+                        </h1>
+                        <p className="mt-1.5 text-sm text-muted">
+                            {branding.system_tagline || 'Sign in to your account'}
+                        </p>
                     </div>
 
-                    {/* Google sign-in */}
-                    {branding.google_login && (
-                        <>
-                            <a
-                                href="/auth/google/redirect"
-                                className={`mt-8 flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-border bg-surface text-sm font-medium transition-all hover:bg-surface-2 active:scale-[0.98] ${googleLoading ? 'pointer-events-none opacity-60' : ''}`}
-                            >
-                                <GoogleIcon />
-                                {googleLoading ? 'Signing you in…' : 'Continue with Google'}
-                            </a>
-                            <div className="mt-6 flex items-center gap-3 text-xs text-muted">
-                                <div className="h-px flex-1 bg-border" />
-                                or sign in with credentials
-                                <div className="h-px flex-1 bg-border" />
-                            </div>
-                        </>
-                    )}
+                    {/* Always offered. If the Google keys aren't configured yet the redirect
+                        bounces straight back with a readable message rather than a 404. */}
+                    <a
+                        href="/auth/google/redirect"
+                        className={`mt-8 flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-border bg-surface text-sm font-medium transition-all hover:bg-surface-2 active:scale-[0.98] ${googleLoading ? 'pointer-events-none opacity-60' : ''}`}
+                    >
+                        <GoogleIcon />
+                        {googleLoading ? 'Signing you in…' : 'Continue with Google'}
+                    </a>
 
-                    {/* Credentials */}
-                    <form onSubmit={submit} className={branding.google_login ? 'mt-6 space-y-4' : 'mt-8 space-y-4'}>
+                    <div className="mt-6 flex items-center gap-3 text-xs text-muted">
+                        <div className="h-px flex-1 bg-border" />
+                        or
+                        <div className="h-px flex-1 bg-border" />
+                    </div>
+
+                    <form onSubmit={submit} className="mt-6 space-y-4">
                         {error && (
                             <motion.div
                                 initial={{ opacity: 0, y: -6 }}
                                 animate={{ opacity: 1, y: 0 }}
+                                role="alert"
                                 className="rounded-xl border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-sm text-danger"
                             >
                                 {error}
                             </motion.div>
                         )}
-                        <Field label="Email or username">
-                            <Input value={identifier} onChange={(e) => setIdentifier(e.target.value)}
-                                placeholder="you@company.com or username" autoComplete="username" required autoFocus />
-                        </Field>
-                        <Field label="Password">
-                            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                                placeholder="••••••••" autoComplete="current-password" required />
-                        </Field>
+
+                        <FloatingInput
+                            label="Email or username"
+                            icon={AtSign}
+                            value={identifier}
+                            onChange={(e) => setIdentifier(e.target.value)}
+                            autoComplete="username"
+                            required
+                            autoFocus
+                        />
+
+                        <FloatingInput
+                            label="Password"
+                            icon={Lock}
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            autoComplete="current-password"
+                            required
+                        />
+
                         <Button type="submit" size="lg" loading={loading} className="w-full">
                             Sign in
                         </Button>
                     </form>
                 </div>
 
-                <p className="mt-6 text-center text-xs text-sidebar-text">
+                <p className="mt-6 text-center text-xs text-white/35">
                     © {new Date().getFullYear()} EAJ Systems · {branding.system_name}
                 </p>
             </motion.div>

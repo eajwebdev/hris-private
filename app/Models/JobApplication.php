@@ -10,7 +10,7 @@ class JobApplication extends Model
 {
     protected $fillable = [
         'job_opening_id', 'first_name', 'last_name', 'email', 'phone',
-        'cover_letter', 'status', 'rating', 'hr_notes', 'reviewed_by', 'reviewed_at',
+        'cover_letter', 'status', 'rating', 'hr_notes', 'reviewed_by', 'reviewed_at', 'employee_id',
     ];
 
     protected function casts(): array
@@ -33,6 +33,12 @@ class JobApplication extends Model
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    /** Set once the applicant has been converted into a 201 record. */
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
     }
 
     public function getFullNameAttribute(): string

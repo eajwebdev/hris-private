@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\Auditor;
 use App\Models\Employee;
 use App\Models\ServiceCredit;
 use App\Models\Setting;
@@ -151,6 +152,15 @@ class ServiceCreditController extends Controller
 
         $this->notifyEmployee($employee, "Service credits granted: {$data['days']} day(s)", $data['reason'] ?? '');
 
+        Auditor::record(
+            'service_credits',
+            'granted',
+            "Granted {$data['days']} credit day(s) to {$employee->full_name}" . ($data['reason'] ? " — {$data['reason']}" : ''),
+            $credit,
+            ['days' => ['old' => null, 'new' => (float) $data['days']]],
+            $employee->branch_id,
+        );
+
         return response()->json(['message' => "Granted {$data['days']} day(s) to {$employee->full_name}.", 'entry' => $this->shape($credit->fresh()->load('employee', 'actor'), admin: true)], 201);
     }
 
@@ -179,6 +189,8 @@ class ServiceCreditController extends Controller
             }
         }
 
+        $before = Auditor::before($credit);
+
         $credit->update([
             'status' => $approved ? 'approved' : 'rejected',
             'acted_by' => $request->user()->id,
@@ -189,6 +201,16 @@ class ServiceCreditController extends Controller
         $employee = Employee::withoutGlobalScopes()->find($credit->employee_id);
         $label = ($credit->entry_type === 'earn' ? 'Credit' : 'Use') . ' request ' . $credit->status;
         $this->notifyEmployee($employee, $label . ": {$credit->days} day(s)", $data['remarks'] ?? '');
+
+        Auditor::record(
+            'service_credits',
+            $approved ? 'approved' : 'rejected',
+            $label . " · {$credit->days} day(s) for " . ($employee?->full_name ?? 'employee')
+                . ($data['remarks'] ?? '' ? " — {$data['remarks']}" : ''),
+            $credit,
+            Auditor::diff($credit, $before),
+            $credit->branch_id,
+        );
 
         return response()->json(['message' => 'Request ' . $credit->status . '.', 'entry' => $this->shape($credit->fresh()->load('employee', 'actor'), admin: true)]);
     }

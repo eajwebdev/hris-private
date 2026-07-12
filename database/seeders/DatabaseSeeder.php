@@ -96,6 +96,8 @@ class DatabaseSeeder extends Seeder
         $this->call(RecruitmentSeeder::class);
         $this->call(BillingSeeder::class);
         $this->call(ServiceCreditSeeder::class);
+        $this->call(PerformanceSeeder::class);
+        $this->call(PayrollComponentSeeder::class);
         $this->callWith(ContentSeeder::class, ['company' => $company, 'branches' => [$makati, $cebu], 'author' => $super]);
 
         $this->command->info('Seeded: admin@eaj.test / hr@eaj.test / employee@eaj.test — all password "password".');

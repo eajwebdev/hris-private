@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Check, X, Plus, Pencil, CalendarClock, ClipboardList, Settings2 } from 'lucide-react';
+import { Check, X, Plus, Pencil, CalendarClock, ClipboardList, Settings2, CalendarDays, Paperclip, Clock, Minus, Inbox } from 'lucide-react';
 import api, { apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useServerPagination, useClientPagination } from '@/hooks/usePagination';
@@ -17,10 +17,39 @@ import { Table, THead, TH, TBody, TR, TD } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { LoadingBlock, EmptyState } from '@/components/ui/States';
 import { formatDate, cn, pageMeta } from '@/lib/utils';
+import { LeaveCalendar } from './LeaveCalendar';
 
 const PER_PAGE = 15;
 
 const STATUS_TONE = { pending: 'amber', approved: 'success', rejected: 'danger', cancelled: 'neutral' };
+
+const STEP_ICON = { approved: Check, rejected: X, pending: Clock, skipped: Minus };
+
+/** The request's approval chain, so HR can see who has signed and who is next. */
+function ApprovalTimeline({ approvals }) {
+    if (!approvals?.length) return null;
+
+    return (
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            {approvals.map((a) => {
+                const Icon = STEP_ICON[a.status] ?? Clock;
+                const tone =
+                    a.status === 'approved' ? 'text-success'
+                    : a.status === 'rejected' ? 'text-danger'
+                    : a.is_current ? 'text-amber'
+                    : 'text-muted';
+
+                return (
+                    <span key={a.level} className={cn('flex items-center gap-1 text-[11px]', tone)}>
+                        <Icon className="h-3 w-3" />
+                        {a.label}
+                        {a.acted_by && <span className="text-muted">· {a.acted_by}</span>}
+                    </span>
+                );
+            })}
+        </div>
+    );
+}
 
 function ActDialog({ request, action, onClose }) {
     const qc = useQueryClient();
@@ -109,13 +138,16 @@ export default function LeavePage() {
     const { can } = useAuth();
     const [tab, setTab] = useState('requests');
     const [status, setStatus] = useState('');
+    const [mine, setMine] = useState(false);
     const [acting, setActing] = useState(null); // { request, action }
     const [typeForm, setTypeForm] = useState(null); // false-y | { type }
-    const { page, setPage } = useServerPagination(status);
+    const { page, setPage } = useServerPagination(`${status}|${mine}`);
 
     const { data: reqData, isLoading } = useQuery({
-        queryKey: ['leave', 'requests', status, page],
-        queryFn: async () => (await api.get('/leave/requests', { params: { status: status || undefined, per_page: PER_PAGE, page } })).data,
+        queryKey: ['leave', 'requests', status, mine, page],
+        queryFn: async () => (await api.get('/leave/requests', {
+            params: { status: status || undefined, mine: mine ? 1 : undefined, per_page: PER_PAGE, page },
+        })).data,
         placeholderData: keepPreviousData,
     });
     const { data: typesData } = useQuery({
@@ -135,7 +167,7 @@ export default function LeavePage() {
 
             {/* Tabs */}
             <div className="mb-4 flex items-center gap-1 rounded-xl bg-surface-2 p-1 w-fit">
-                {[['requests', 'Requests', ClipboardList], ['types', 'Leave types', Settings2]].map(([key, label, Icon]) => (
+                {[['requests', 'Requests', ClipboardList], ['calendar', 'Team calendar', CalendarDays], ['types', 'Leave types', Settings2]].map(([key, label, Icon]) => (
                     <button key={key} onClick={() => setTab(key)}
                         className={cn('flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors',
                             tab === key ? 'bg-surface shadow-sm text-foreground' : 'text-muted hover:text-foreground')}>
@@ -155,6 +187,10 @@ export default function LeavePage() {
                                 <option value="rejected">Rejected</option>
                                 <option value="cancelled">Cancelled</option>
                             </Select>
+                            {/* Only the steps this user is the named approver for, and only while it's their turn. */}
+                            <Button variant={mine ? 'soft' : 'outline'} size="sm" onClick={() => setMine((m) => !m)}>
+                                <Inbox className="h-4 w-4" /> Waiting on me
+                            </Button>
                         </div>
                         {isLoading ? <LoadingBlock /> : requests.length === 0 ? (
                             <EmptyState icon={CalendarClock} title="No leave requests" message="Employee requests will land here for approval." />
@@ -188,13 +224,30 @@ export default function LeavePage() {
                                                 </span>
                                             </TD>
                                             <TD className="whitespace-nowrap">
-                                                {formatDate(r.date_from, { month: 'short', day: 'numeric' })} – {formatDate(r.date_to, { month: 'short', day: 'numeric' })}
+                                                {formatDate(r.date_from, { month: 'short', day: 'numeric' })}
+                                                {r.date_to !== r.date_from && ` – ${formatDate(r.date_to, { month: 'short', day: 'numeric' })}`}
                                                 <span className="ml-1 text-xs text-muted">({r.days}d)</span>
+                                                {r.half_day && (
+                                                    <span className="ml-1 text-xs text-muted">{r.half_day === 'am' ? '½ AM' : '½ PM'}</span>
+                                                )}
                                             </TD>
                                             <TD className="hidden md:table-cell max-w-[220px]">
                                                 <p className="truncate text-muted">{r.reason ?? '—'}</p>
+                                                {r.attachment_url && (
+                                                    <a href={r.attachment_url} target="_blank" rel="noreferrer"
+                                                        className="inline-flex items-center gap-1 text-xs text-brand hover:underline">
+                                                        <Paperclip className="h-3 w-3" />
+                                                        {r.attachment_name ?? 'Attachment'}
+                                                    </a>
+                                                )}
                                             </TD>
-                                            <TD><Badge tone={STATUS_TONE[r.status]} className="capitalize">{r.status}</Badge></TD>
+                                            <TD>
+                                                <Badge tone={STATUS_TONE[r.status]} className="capitalize">{r.status}</Badge>
+                                                {r.waiting_on && (
+                                                    <p className="mt-0.5 text-[11px] text-muted">with {r.waiting_on}</p>
+                                                )}
+                                                <ApprovalTimeline approvals={r.approvals} />
+                                            </TD>
                                             <TD>
                                                 <div className="flex items-center justify-end gap-0.5">
                                                     {r.status === 'pending' && can('leave', 'approve') && (
@@ -218,6 +271,8 @@ export default function LeavePage() {
                     </CardBody>
                 </Card>
             )}
+
+            {tab === 'calendar' && <LeaveCalendar />}
 
             {tab === 'types' && (
                 <Card>

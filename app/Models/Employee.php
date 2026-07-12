@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToBranch;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -81,5 +82,12 @@ class Employee extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(EmployeeDocument::class);
+    }
+
+    /** Salary components explicitly assigned to (or overridden for) this employee. */
+    public function payrollComponents(): BelongsToMany
+    {
+        return $this->belongsToMany(PayrollComponent::class, 'employee_payroll_components')
+            ->withPivot('amount', 'is_active')->withTimestamps();
     }
 }

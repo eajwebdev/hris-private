@@ -3,11 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Employee;
+use App\Models\EmployeeDocument;
 use App\Models\JobApplication;
 use App\Models\JobOpening;
+use App\Services\Auditor;
 use App\Services\Notifier;
+use App\Support\PrivateFile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class RecruitmentController extends Controller
 {
@@ -160,6 +166,135 @@ class RecruitmentController extends Controller
         return response()->json(['message' => 'Application updated.', 'application' => $this->shapeApplication($application->fresh()->load('documents', 'reviewer:id,name'), full: true)]);
     }
 
+    /**
+     * The ATS board: every application for the company, bucketed by pipeline
+     * stage. Returned as columns so the client renders the board straight from
+     * the server's own stage list rather than hardcoding one.
+     */
+    public function pipeline(Request $request): JsonResponse
+    {
+        $companyId = $request->user()->company_id;
+
+        $applications = JobApplication::with('opening:id,title', 'documents', 'reviewer:id,name')
+            ->whereHas('opening', fn ($w) => $w->where('company_id', $companyId))
+            ->when($request->filled('opening_id'), fn ($w) => $w->where('job_opening_id', $request->integer('opening_id')))
+            ->orderByDesc('rating')
+            ->orderByDesc('created_at')
+            ->get();
+
+        $columns = collect(JobApplication::STATUSES)->map(fn (string $status) => [
+            'key' => $status,
+            'label' => ucfirst($status),
+            'applications' => $applications->where('status', $status)
+                ->map(fn ($a) => $this->shapeApplication($a))->values(),
+        ])->values();
+
+        return response()->json([
+            'columns' => $columns,
+            'total' => $applications->count(),
+        ]);
+    }
+
+    /**
+     * Turn a hired applicant into an employee 201 record in one step, carrying
+     * their uploaded documents across into the document vault.
+     */
+    public function convert(Request $request, JobApplication $application): JsonResponse
+    {
+        abort_unless($application->opening->company_id === $request->user()->company_id, 404);
+
+        if ($application->employee_id) {
+            return response()->json(['message' => 'This applicant has already been added as an employee.'], 422);
+        }
+        if ($application->status !== 'hired') {
+            return response()->json(['message' => 'Move the applicant to “hired” before creating their 201 record.'], 422);
+        }
+
+        $data = $request->validate([
+            'branch_id' => ['required', 'exists:branches,id'],
+            'department_id' => ['nullable', 'exists:departments,id'],
+            'position_id' => ['nullable', 'exists:positions,id'],
+            'manager_id' => ['nullable', 'exists:employees,id'],
+            'employee_no' => ['nullable', 'string', 'max:40'],
+            'employment_type' => ['required', 'in:full_time,part_time,contract,internship'],
+            'date_hired' => ['required', 'date'],
+            'basic_salary' => ['required', 'numeric', 'min:0'],
+            'create_login' => ['boolean'],
+        ]);
+
+        // The email is the identity here — a duplicate would split one person's
+        // record across two 201 files.
+        $existing = Employee::withoutGlobalScopes()->where('email', $application->email)->first();
+        if ($existing) {
+            return response()->json([
+                'message' => "An employee with the email {$application->email} already exists ({$existing->full_name}).",
+            ], 422);
+        }
+
+        $employee = DB::transaction(function () use ($application, $data, $request) {
+            $employee = Employee::create([
+                'company_id' => $request->user()->company_id,
+                'branch_id' => $data['branch_id'],
+                'department_id' => $data['department_id'] ?? null,
+                'position_id' => $data['position_id'] ?? null,
+                'manager_id' => $data['manager_id'] ?? null,
+                // Optional field: absent from $data entirely when the client omits it.
+                'employee_no' => ($data['employee_no'] ?? null) ?: null,
+                'first_name' => $application->first_name,
+                'last_name' => $application->last_name,
+                'email' => $application->email,
+                'phone' => $application->phone,
+                'employment_type' => $data['employment_type'],
+                'status' => 'probationary',
+                'date_hired' => $data['date_hired'],
+                'basic_salary' => $data['basic_salary'],
+            ]);
+
+            // Carry the application's documents into the employee's vault. They are
+            // copied, not moved: the application keeps its own audit trail intact.
+            foreach ($application->documents as $doc) {
+                $source = $doc->file_path;
+                $disk = Storage::disk(PrivateFile::DISK);
+
+                if (! $source || ! $disk->exists($source)) {
+                    continue;
+                }
+
+                // Stays on the private disk on both sides — these are the applicant's CV
+                // and government IDs, and they are no less sensitive once the person is hired.
+                $target = "employees/{$employee->branch_id}/{$employee->id}/docs/" . basename($source);
+                $disk->copy($source, $target);
+
+                EmployeeDocument::create([
+                    'employee_id' => $employee->id,
+                    'name' => $doc->label ?: $doc->original_name,
+                    'category' => 'recruitment',
+                    'path' => $target,
+                    'mime' => $disk->mimeType($target) ?: null,
+                    'size' => $disk->size($target),
+                ]);
+            }
+
+            $application->update(['employee_id' => $employee->id]);
+
+            return $employee;
+        });
+
+        Auditor::record(
+            'recruitment',
+            'created',
+            "Converted applicant {$application->full_name} into employee {$employee->full_name}.",
+            $employee,
+            null,
+            $employee->branch_id,
+        );
+
+        return response()->json([
+            'message' => "{$employee->full_name} added to Employees. Provision their ESS login from their 201 record.",
+            'employee_id' => $employee->id,
+        ], 201);
+    }
+
     // ------------------------------------------------------------ shapes
 
     private function validateOpening(Request $request): array
@@ -226,6 +361,8 @@ class RecruitmentController extends Controller
             'opening' => $a->opening?->title,
             'opening_id' => $a->job_opening_id,
             'documents_count' => $a->documents->count(),
+            'employee_id' => $a->employee_id,
+            'converted' => (bool) $a->employee_id,
             'created_at' => $a->created_at->toIso8601String(),
         ];
 

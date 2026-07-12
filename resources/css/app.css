@@ -156,3 +156,74 @@
     100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 0%, transparent); }
 }
 .presence-pulse { animation: presence-pulse 1.1s ease-out; }
+
+/* --------------------------------------------------------------------------
+   Sign-in backdrop (AuthBackground.jsx)
+   Two slow aurora blooms drifting behind the node canvas. Durations are long and
+   deliberately coprime so the pair never settles into a visible shared loop.
+   The global prefers-reduced-motion rule above already flattens these.
+   -------------------------------------------------------------------------- */
+.aurora {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(90px);
+    will-change: transform;
+}
+.aurora-1 {
+    top: -18%;
+    right: -12%;
+    width: 46rem;
+    height: 46rem;
+    background: color-mix(in srgb, var(--brand) 32%, transparent);
+    animation: aurora-drift-1 23s ease-in-out infinite;
+}
+.aurora-2 {
+    bottom: -22%;
+    left: -14%;
+    width: 38rem;
+    height: 38rem;
+    background: color-mix(in srgb, var(--brand) 16%, transparent);
+    animation: aurora-drift-2 31s ease-in-out infinite;
+}
+@keyframes aurora-drift-1 {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+    50%      { transform: translate3d(-4rem, 3rem, 0) scale(1.12); }
+}
+@keyframes aurora-drift-2 {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1.08); }
+    50%      { transform: translate3d(5rem, -2.5rem, 0) scale(1); }
+}
+
+/* Sign-in card: a hairline gradient edge that catches the aurora behind it.
+   Fully opaque, deliberately. A translucent card over the dark aurora goes muddy grey,
+   and — less obviously — the floating labels in FloatingInput sit on the field's top
+   border as a chip filled with var(--surface). If the card were even slightly
+   translucent, that chip would read as a lighter rectangle behind every label. */
+.auth-card {
+    position: relative;
+    border-radius: 1.5rem;
+    background: var(--surface);
+    box-shadow:
+        0 1px 0 0 rgba(255, 255, 255, 0.4) inset,
+        0 40px 80px -24px rgba(3, 6, 24, 0.7),
+        0 8px 24px -12px rgba(3, 6, 24, 0.4);
+}
+.auth-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    background: linear-gradient(
+        140deg,
+        color-mix(in srgb, var(--brand) 55%, transparent),
+        transparent 40%,
+        transparent 65%,
+        rgba(255, 255, 255, 0.18)
+    );
+    /* Punch out the middle so the gradient reads as a 1px border, not a fill. */
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+}

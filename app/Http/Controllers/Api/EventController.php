@@ -4,19 +4,36 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Event;
+use App\Models\EventRsvp;
 use App\Services\Notifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class EventController extends Controller
 {
-    /** Events visible to a user: company-wide (branch null) + their branches. */
+    public const RSVP_STATUSES = ['going', 'maybe', 'declined'];
+
+    /**
+     * Events visible to a user: company-wide (branch null) + their branches.
+     *
+     * Eager-loads the caller's own RSVP (not everyone's) plus per-status counts,
+     * so a calendar of N events costs a constant number of queries.
+     */
     private function visibleQuery(Request $request)
     {
         $user = $request->user();
         $branchIds = $user->accessibleBranchIds();
 
-        return Event::with('branch:id,name', 'creator:id,name')
+        return Event::with([
+            'branch:id,name',
+            'creator:id,name',
+            'rsvps' => fn ($q) => $q->where('user_id', $user->id),
+        ])
+            ->withCount([
+                'rsvps as going_count' => fn ($q) => $q->where('status', 'going'),
+                'rsvps as maybe_count' => fn ($q) => $q->where('status', 'maybe'),
+                'rsvps as declined_count' => fn ($q) => $q->where('status', 'declined'),
+            ])
             ->where('company_id', $user->company_id)
             ->where(function ($q) use ($branchIds) {
                 $q->whereNull('branch_id')->orWhereIn('branch_id', $branchIds);
@@ -84,6 +101,65 @@ class EventController extends Controller
         return response()->json(['message' => 'Event deleted.']);
     }
 
+    /**
+     * Employee RSVPs to an event (or changes their answer). One row per
+     * (event, user) — the unique index makes this an upsert, not an append.
+     */
+    public function rsvp(Request $request, Event $event): JsonResponse
+    {
+        $user = $request->user();
+
+        // Must be an event this user can actually see.
+        abort_unless(
+            $event->company_id === $user->company_id
+            && ($event->branch_id === null || in_array($event->branch_id, $user->accessibleBranchIds(), true)),
+            404
+        );
+
+        if (! $event->rsvp_enabled) {
+            return response()->json(['message' => 'RSVP isn’t open for this event.'], 422);
+        }
+
+        $data = $request->validate([
+            'status' => ['required', 'in:' . implode(',', self::RSVP_STATUSES)],
+        ]);
+
+        EventRsvp::updateOrCreate(
+            ['event_id' => $event->id, 'user_id' => $user->id],
+            ['status' => $data['status']],
+        );
+
+        $label = ['going' => 'You’re going.', 'maybe' => 'Marked as maybe.', 'declined' => 'You’ve declined.'];
+
+        return response()->json([
+            'message' => $label[$data['status']],
+            'event' => $this->shape($this->visibleQuery($request)->findOrFail($event->id)),
+        ]);
+    }
+
+    /** HR: who's coming. Gated by the events module. */
+    public function attendees(Request $request, Event $event): JsonResponse
+    {
+        abort_unless($event->company_id === $request->user()->company_id, 404);
+
+        $rsvps = $event->rsvps()->with('user:id,name,email')->get();
+
+        $shape = fn ($status) => $rsvps->where('status', $status)->map(fn ($r) => [
+            'id' => $r->id,
+            'user_id' => $r->user_id,
+            'name' => $r->user?->name ?? '—',
+            'email' => $r->user?->email,
+            'responded_at' => $r->updated_at?->toIso8601String(),
+        ])->values();
+
+        return response()->json([
+            'event' => ['id' => $event->id, 'title' => $event->title, 'rsvp_enabled' => $event->rsvp_enabled],
+            'going' => $shape('going'),
+            'maybe' => $shape('maybe'),
+            'declined' => $shape('declined'),
+        ]);
+    }
+
     private function validateEvent(Request $request): array
     {
         $data = $request->validate([
@@ -118,6 +194,14 @@ class EventController extends Controller
             'color' => $e->color,
             'audience' => $e->audience,
             'created_by' => $e->creator?->name,
+            // `rsvps` is constrained to the caller in visibleQuery(), so this is
+            // *their* answer — null until they respond.
+            'my_rsvp' => $e->relationLoaded('rsvps') ? $e->rsvps->first()?->status : null,
+            'rsvp_counts' => [
+                'going' => (int) ($e->going_count ?? 0),
+                'maybe' => (int) ($e->maybe_count ?? 0),
+                'declined' => (int) ($e->declined_count ?? 0),
+            ],
         ];
     }
 }

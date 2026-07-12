@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\Auditor;
 use App\Models\Setting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -64,7 +65,20 @@ class SettingController extends Controller
             $pairs['logo_path'] = '';
         }
 
+        $before = collect($pairs)->mapWithKeys(fn ($v, $k) => [$k => Setting::get($k)])->all();
+
         Setting::putMany($pairs);
+
+        $changes = [];
+        foreach ($pairs as $key => $new) {
+            if ((string) ($before[$key] ?? '') !== (string) $new) {
+                $changes[$key] = ['old' => $before[$key] ?? null, 'new' => $new];
+            }
+        }
+
+        if ($changes) {
+            Auditor::record('settings', 'updated', 'System settings changed: ' . implode(', ', array_keys($changes)), null, $changes);
+        }
 
         return response()->json(array_merge(['message' => 'Settings saved.'], Setting::branding()));
     }

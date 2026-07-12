@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { Plus, CalendarClock, XCircle } from 'lucide-react';
+import { Plus, CalendarClock, XCircle, Paperclip, Check, X, Clock, Minus, AlertTriangle } from 'lucide-react';
 import api, { apiError } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardBody } from '@/components/ui/Card';
@@ -10,24 +10,68 @@ import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
-import { Field, Select, Textarea } from '@/components/ui/Field';
+import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { LoadingBlock, EmptyState } from '@/components/ui/States';
-import { formatDate } from '@/lib/utils';
+import { formatDate, cn } from '@/lib/utils';
 
 const STATUS_TONE = { pending: 'amber', approved: 'success', rejected: 'danger', cancelled: 'neutral' };
 
+const STEP_ICON = { approved: Check, rejected: X, pending: Clock, skipped: Minus };
+
+/** Submitted → each approval step → settled. */
+function ApprovalTimeline({ approvals }) {
+    if (!approvals?.length) return null;
+
+    return (
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+            {approvals.map((a) => {
+                const Icon = STEP_ICON[a.status] ?? Clock;
+                const tone =
+                    a.status === 'approved' ? 'text-success'
+                    : a.status === 'rejected' ? 'text-danger'
+                    : a.is_current ? 'text-amber'
+                    : 'text-muted';
+
+                return (
+                    <span key={a.level} className={cn('flex items-center gap-1 text-xs', tone)}>
+                        <Icon className="h-3 w-3" />
+                        {a.label}
+                        {a.is_current && <span className="text-muted">· waiting</span>}
+                        {a.acted_by && <span className="text-muted">· {a.acted_by}</span>}
+                    </span>
+                );
+            })}
+        </div>
+    );
+}
+
 function RequestForm({ open, onClose, balances }) {
     const qc = useQueryClient();
-    const EMPTY = { leave_type_id: '', date_from: '', date_to: '', reason: '' };
+    const EMPTY = { leave_type_id: '', date_from: '', date_to: '', half_day: '', reason: '' };
     const [form, setForm] = useState(EMPTY);
+    const [file, setFile] = useState(null);
 
     const save = useMutation({
-        mutationFn: () => api.post('/leave/requests', { ...form, date_to: form.date_to || form.date_from }),
+        mutationFn: () => {
+            // Multipart, because an attachment may ride along.
+            const body = new FormData();
+            body.append('leave_type_id', form.leave_type_id);
+            body.append('date_from', form.date_from);
+            body.append('date_to', form.date_to || form.date_from);
+            if (form.half_day) body.append('half_day', form.half_day);
+            if (form.reason) body.append('reason', form.reason);
+            if (file) body.append('attachment', file);
+
+            return api.post('/leave/requests', body);
+        },
         onSuccess: ({ data }) => {
             toast.success(data.message);
+            // Advisory, not a failure — surface it separately so it isn't mistaken for one.
+            if (data.coverage_warning) toast.warning(data.coverage_warning, { duration: 8000 });
             qc.invalidateQueries({ queryKey: ['leave', 'my'] });
             setForm(EMPTY);
+            setFile(null);
             onClose();
         },
         onError: (err) => toast.error(apiError(err)),
@@ -35,6 +79,9 @@ function RequestForm({ open, onClose, balances }) {
 
     const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
     const selected = balances.find((b) => String(b.type_id) === String(form.leave_type_id));
+
+    // A half-day only makes sense on a single date.
+    const singleDay = !!form.date_from && (!form.date_to || form.date_to === form.date_from);
 
     return (
         <Modal open={open} onClose={onClose} title="Request leave"
@@ -58,14 +105,41 @@ function RequestForm({ open, onClose, balances }) {
                 {selected && selected.remaining <= 0 && (
                     <p className="text-xs text-danger">You have no remaining {selected.type} balance this year.</p>
                 )}
+
                 <Field label="Leave dates">
                     <DateRangePicker
                         value={{ from: form.date_from, to: form.date_to }}
-                        onChange={(r) => setForm((f) => ({ ...f, date_from: r.from, date_to: r.to }))}
+                        onChange={(r) => setForm((f) => ({
+                            ...f,
+                            date_from: r.from,
+                            date_to: r.to,
+                            // A range can't be a half-day — clear it rather than fail server-side.
+                            half_day: r.to && r.to !== r.from ? '' : f.half_day,
+                        }))}
                         minDate={new Date()}
                         placeholder="Pick your leave dates"
                     />
                 </Field>
+
+                {singleDay && (
+                    <Field label="Half-day" hint="Leave as “Whole day” to use the full day.">
+                        <Select value={form.half_day} onChange={set('half_day')}>
+                            <option value="">Whole day (1.0)</option>
+                            <option value="am">Morning only (0.5)</option>
+                            <option value="pm">Afternoon only (0.5)</option>
+                        </Select>
+                    </Field>
+                )}
+
+                <Field label="Attachment (optional)" hint="Medical certificate or supporting document. PDF, image or Word, up to 5MB.">
+                    <Input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                        className="h-auto py-2"
+                    />
+                </Field>
+
                 <Field label="Reason (optional)">
                     <Textarea rows={3} value={form.reason} onChange={set('reason')} placeholder="Short context for your approver" />
                 </Field>
@@ -128,17 +202,39 @@ export default function MyLeave() {
                             ) : (
                                 <div className="space-y-2">
                                     {requests.map((r) => (
-                                        <div key={r.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border p-3">
-                                            <span className="h-8 w-1.5 rounded-full" style={{ backgroundColor: r.type_color }} />
+                                        <div key={r.id} className="flex flex-wrap items-start gap-3 rounded-xl border border-border p-3">
+                                            <span className="mt-0.5 h-8 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: r.type_color }} />
+
                                             <div className="min-w-0 flex-1">
                                                 <p className="font-medium">
-                                                    {r.type} · {r.days} day{r.days > 1 ? 's' : ''}
+                                                    {r.type} · {r.days} day{r.days !== 1 ? 's' : ''}
+                                                    {r.half_day && (
+                                                        <span className="ml-1.5 text-xs font-normal text-muted">
+                                                            ({r.half_day === 'am' ? 'morning' : 'afternoon'} only)
+                                                        </span>
+                                                    )}
                                                 </p>
                                                 <p className="text-xs text-muted">
-                                                    {formatDate(r.date_from)} – {formatDate(r.date_to)}
+                                                    {formatDate(r.date_from)}
+                                                    {r.date_to !== r.date_from && ` – ${formatDate(r.date_to)}`}
                                                     {r.remarks && <span className="italic"> · “{r.remarks}”</span>}
                                                 </p>
+
+                                                {r.attachment_url && (
+                                                    <a
+                                                        href={r.attachment_url}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="mt-1 inline-flex items-center gap-1 text-xs text-brand hover:underline"
+                                                    >
+                                                        <Paperclip className="h-3 w-3" />
+                                                        {r.attachment_name ?? 'Attachment'}
+                                                    </a>
+                                                )}
+
+                                                <ApprovalTimeline approvals={r.approvals} />
                                             </div>
+
                                             <Badge tone={STATUS_TONE[r.status]} className="capitalize">{r.status}</Badge>
                                             {r.status === 'pending' && (
                                                 <IconButton label="Cancel request" icon={XCircle} tone="danger" onClick={() => cancel.mutate(r.id)} />

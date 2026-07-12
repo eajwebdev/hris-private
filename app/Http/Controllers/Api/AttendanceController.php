@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\Auditor;
 use App\Http\Resources\AttendanceResource;
 use App\Models\Attendance;
 use App\Models\Employee;
@@ -126,6 +127,8 @@ class AttendanceController extends Controller
             'note' => ['required', 'string', 'max:500'],
         ]);
 
+        $before = Auditor::before($attendance);
+
         $attendance->clock_ins = $data['clock_ins'] ?? $attendance->clock_ins;
         $attendance->clock_outs = $data['clock_outs'] ?? $attendance->clock_outs;
         $attendance->note = '[' . now()->toDateString() . ' by ' . $request->user()->name . '] ' . $data['note'];
@@ -133,6 +136,14 @@ class AttendanceController extends Controller
         $employee = Employee::withoutGlobalScopes()->find($attendance->employee_id);
         $this->service->evaluate($attendance, WorkSchedule::forEmployee($employee));
         $attendance->save();
+
+        Auditor::record(
+            'attendance',
+            'corrected',
+            trim(($employee?->full_name ?? 'Employee') . ' · ' . $attendance->work_date->toDateString() . ' — ' . $data['note']),
+            $attendance,
+            Auditor::diff($attendance, $before),
+        );
 
         return response()->json(['message' => 'Attendance corrected.', 'attendance' => new AttendanceResource($attendance)]);
     }

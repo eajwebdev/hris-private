@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { Plus, Pencil, Trash2, Megaphone, Pin } from 'lucide-react';
+import { Plus, Pencil, Trash2, Megaphone, Pin, Eye, Check, Clock } from 'lucide-react';
 import api, { apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useBranches } from '@/hooks/useLookups';
@@ -13,6 +13,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { Badge } from '@/components/ui/Badge';
 import { Modal, ConfirmDialog } from '@/components/ui/Modal';
 import { Field, Input, Select, Textarea } from '@/components/ui/Field';
+import { Avatar } from '@/components/ui/Avatar';
 import { LoadingBlock, EmptyState } from '@/components/ui/States';
 import { formatDate } from '@/lib/utils';
 
@@ -90,6 +91,68 @@ function AnnouncementForm({ open, onClose, item }) {
     );
 }
 
+/** Who has read this announcement, and who hasn't. */
+function ReadersModal({ announcement, onClose }) {
+    const { data, isLoading } = useQuery({
+        queryKey: ['announcements', 'readers', announcement?.id],
+        queryFn: async () => (await api.get(`/announcements/${announcement.id}/readers`)).data,
+        enabled: !!announcement,
+    });
+
+    const pct = data?.audience > 0 ? Math.round((data.read.length / data.audience) * 100) : 0;
+
+    return (
+        <Modal
+            open={!!announcement}
+            onClose={onClose}
+            size="lg"
+            title="Read receipts"
+            description={announcement?.title}
+        >
+            {isLoading ? <LoadingBlock /> : (
+                <div className="space-y-4">
+                    <div className="rounded-xl border border-border p-3">
+                        <div className="flex items-baseline justify-between">
+                            <p className="text-sm font-medium">{data.read.length} of {data.audience} have read this</p>
+                            <span className="tabular font-display text-lg font-semibold">{pct}%</span>
+                        </div>
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
+                            <div className="h-full rounded-full bg-brand" style={{ width: `${pct}%` }} />
+                        </div>
+                    </div>
+
+                    {[
+                        { key: 'read', label: 'Read', icon: Check, rows: data.read, tone: 'text-success' },
+                        { key: 'unread', label: 'Not yet read', icon: Clock, rows: data.unread, tone: 'text-muted' },
+                    ].map((g) => (
+                        g.rows.length > 0 && (
+                            <div key={g.key}>
+                                <p className={`mb-2 flex items-center gap-1.5 text-sm font-medium ${g.tone}`}>
+                                    <g.icon className="h-4 w-4" /> {g.label} ({g.rows.length})
+                                </p>
+                                <div className="space-y-1.5">
+                                    {g.rows.map((u) => (
+                                        <div key={u.id} className="flex items-center gap-2.5 rounded-lg border border-border p-2">
+                                            <Avatar name={u.name} size="sm" />
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-sm font-medium">{u.name}</p>
+                                                <p className="truncate text-xs text-muted">{u.email}</p>
+                                            </div>
+                                            {u.read_at && (
+                                                <span className="text-xs text-muted">{formatDate(u.read_at)}</span>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )
+                    ))}
+                </div>
+            )}
+        </Modal>
+    );
+}
+
 export default function AnnouncementsPage() {
     const { can } = useAuth();
     const qc = useQueryClient();
@@ -97,6 +160,7 @@ export default function AnnouncementsPage() {
     const [editing, setEditing] = useState(null);
     const [deleting, setDeleting] = useState(null);
 
+    const [readersFor, setReadersFor] = useState(null);
     const { data, isLoading } = useQuery({ queryKey: ['announcements', 'admin'], queryFn: async () => (await api.get('/announcements')).data });
     const items = data?.data ?? [];
 
@@ -137,6 +201,14 @@ export default function AnnouncementsPage() {
                                             {a.published_at ? `Published ${formatDate(a.published_at)}` : `Created ${formatDate(a.created_at)}`}
                                             {a.created_by && ` · by ${a.created_by}`}
                                         </p>
+
+                                        {a.published_at && (
+                                            <button onClick={() => setReadersFor(a)}
+                                                className="mt-1 inline-flex items-center gap-1 text-xs text-brand hover:underline">
+                                                <Eye className="h-3.5 w-3.5" />
+                                                {a.reads_count} read receipt{a.reads_count === 1 ? '' : 's'}
+                                            </button>
+                                        )}
                                     </div>
                                     <div className="flex shrink-0 items-center gap-0.5">
                                         {can('announcements', 'edit') && <IconButton label="Edit" icon={Pencil} tone="brand" onClick={() => { setEditing(a); setFormOpen(true); }} />}
@@ -150,6 +222,7 @@ export default function AnnouncementsPage() {
             )}
 
             <AnnouncementForm open={formOpen} onClose={() => setFormOpen(false)} item={editing} />
+            <ReadersModal announcement={readersFor} onClose={() => setReadersFor(null)} />
             <ConfirmDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => del.mutate(deleting.id)}
                 loading={del.isPending} title="Delete announcement?" message={`“${deleting?.title}” will be removed for everyone.`} confirmLabel="Delete" />
         </>

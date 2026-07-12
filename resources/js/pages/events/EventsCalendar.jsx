@@ -4,21 +4,78 @@ import {
     startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths,
     format, isSameMonth, isSameDay, parseISO,
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus, CalendarDays, MapPin } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, CalendarDays, MapPin, Users, Check, HelpCircle, X } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { PageHeader } from '@/components/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { LoadingBlock } from '@/components/ui/States';
+import { Badge } from '@/components/ui/Badge';
+import { Avatar } from '@/components/ui/Avatar';
+import { Modal } from '@/components/ui/Modal';
+import { LoadingBlock, LoadingBlock as Loading, EmptyState } from '@/components/ui/States';
 import { cn } from '@/lib/utils';
 import { EventForm } from './EventForm';
+
+/** Who responded to an event, grouped by answer. */
+function AttendeesModal({ event, onClose }) {
+    const { data, isLoading } = useQuery({
+        queryKey: ['events', 'attendees', event?.id],
+        queryFn: async () => (await api.get(`/events/${event.id}/attendees`)).data,
+        enabled: !!event,
+    });
+
+    const groups = [
+        { key: 'going', label: 'Going', icon: Check, tone: 'success' },
+        { key: 'maybe', label: 'Maybe', icon: HelpCircle, tone: 'amber' },
+        { key: 'declined', label: "Can't go", icon: X, tone: 'danger' },
+    ];
+
+    const total = groups.reduce((n, g) => n + (data?.[g.key]?.length ?? 0), 0);
+
+    return (
+        <Modal open={!!event} onClose={onClose} size="lg" title={`Attendees · ${event?.title ?? ''}`}
+            description={event?.rsvp_enabled ? 'Who has responded so far.' : 'RSVP is turned off for this event.'}>
+            {isLoading ? <Loading /> : total === 0 ? (
+                <EmptyState icon={Users} title="No responses yet"
+                    message={event?.rsvp_enabled ? 'Employees will appear here as they RSVP.' : 'Turn RSVP on in the event to collect responses.'} />
+            ) : (
+                <div className="space-y-5">
+                    {groups.map((g) => {
+                        const people = data?.[g.key] ?? [];
+                        if (people.length === 0) return null;
+                        return (
+                            <div key={g.key}>
+                                <p className="mb-2 flex items-center gap-2 text-sm font-medium">
+                                    <g.icon className="h-4 w-4" /> {g.label}
+                                    <Badge tone={g.tone}>{people.length}</Badge>
+                                </p>
+                                <div className="space-y-1.5">
+                                    {people.map((p) => (
+                                        <div key={p.id} className="flex items-center gap-2.5 rounded-lg border border-border p-2">
+                                            <Avatar name={p.name} size="sm" />
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-medium">{p.name}</p>
+                                                {p.email && <p className="truncate text-xs text-muted">{p.email}</p>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </Modal>
+    );
+}
 
 export default function EventsCalendar() {
     const { can } = useAuth();
     const [cursor, setCursor] = useState(new Date());
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState(null);
+    const [attendeesFor, setAttendeesFor] = useState(null);
     const [defaultDate, setDefaultDate] = useState(null);
 
     const monthStart = startOfMonth(cursor);
@@ -133,17 +190,31 @@ export default function EventsCalendar() {
                         .filter((e) => parseISO(e.starts_at) >= new Date(new Date().setHours(0, 0, 0, 0)))
                         .slice(0, 6)
                         .map((e) => (
-                            <button key={e.id} onClick={() => openEdit(e)} className="card-surface p-4 text-left hover:border-brand">
-                                <div className="flex items-center gap-2">
-                                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: e.color }} />
-                                    <span className="text-xs text-muted">{format(parseISO(e.starts_at), 'EEE, MMM d · h:mma')}</span>
-                                </div>
-                                <p className="mt-1.5 font-medium">{e.title}</p>
-                                <div className="mt-1 flex items-center gap-3 text-xs text-muted">
-                                    {e.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{e.location}</span>}
-                                    <span>{e.branch ?? 'All branches'}</span>
-                                </div>
-                            </button>
+                            <div key={e.id} className="card-surface p-4 hover:border-brand">
+                                <button onClick={() => openEdit(e)} className="w-full text-left">
+                                    <div className="flex items-center gap-2">
+                                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: e.color }} />
+                                        <span className="text-xs text-muted">{format(parseISO(e.starts_at), 'EEE, MMM d · h:mma')}</span>
+                                    </div>
+                                    <p className="mt-1.5 font-medium">{e.title}</p>
+                                    <div className="mt-1 flex items-center gap-3 text-xs text-muted">
+                                        {e.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{e.location}</span>}
+                                        <span>{e.branch ?? 'All branches'}</span>
+                                    </div>
+                                </button>
+
+                                {e.rsvp_enabled && (
+                                    <button
+                                        onClick={() => setAttendeesFor(e)}
+                                        className="mt-2.5 flex w-full items-center gap-1.5 border-t border-border pt-2.5 text-xs text-brand hover:underline"
+                                    >
+                                        <Users className="h-3.5 w-3.5" />
+                                        {e.rsvp_counts?.going ?? 0} going
+                                        {e.rsvp_counts?.maybe > 0 && ` · ${e.rsvp_counts.maybe} maybe`}
+                                        <span className="ml-auto">View attendees</span>
+                                    </button>
+                                )}
+                            </div>
                         ))}
                     {(data?.data ?? []).length === 0 && (
                         <div className="col-span-full flex flex-col items-center gap-2 py-10 text-center text-muted">
@@ -155,6 +226,7 @@ export default function EventsCalendar() {
             </div>
 
             <EventForm open={formOpen} onClose={() => setFormOpen(false)} event={editing} defaultDate={defaultDate} />
+            <AttendeesModal event={attendeesFor} onClose={() => setAttendeesFor(null)} />
         </>
     );
 }

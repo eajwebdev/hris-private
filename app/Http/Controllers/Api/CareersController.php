@@ -8,6 +8,7 @@ use App\Models\JobApplication;
 use App\Models\JobOpening;
 use App\Models\User;
 use App\Services\Notifier;
+use App\Support\PrivateFile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -15,9 +16,44 @@ use Illuminate\Support\Facades\Validator;
 /** Public careers portal — no authentication. */
 class CareersController extends Controller
 {
+    /**
+     * The tenant this careers portal belongs to.
+     *
+     * The portal is unauthenticated, so there is no user to infer a tenant from, and the
+     * app has no host/subdomain tenant routing. `Company::first()` therefore silently
+     * published whichever company happened to sort first — wrong the moment a second one
+     * exists. Pin it explicitly with HRIS_COMPANY_ID; with a single company (the norm for
+     * one deployment) it resolves on its own.
+     */
     private function company(): ?Company
     {
-        return Company::query()->first();
+        $pinned = config('hris.company_id');
+
+        if ($pinned) {
+            return Company::find($pinned);
+        }
+
+        // Refuse to guess rather than expose the wrong tenant's openings.
+        return Company::query()->count() === 1
+            ? Company::query()->first()
+            : null;
+    }
+
+    /**
+     * A published opening on THIS portal's company. Scoped to the tenant so a slug
+     * collision between two companies can never surface the wrong one's vacancy.
+     */
+    private function publishedOpening(string $slug, array $with = []): JobOpening
+    {
+        $company = $this->company();
+        abort_unless($company, 404);
+
+        return JobOpening::with($with)
+            ->where('company_id', $company->id)
+            ->where('slug', $slug)
+            ->where('status', 'open')
+            ->whereNotNull('published_at')
+            ->firstOrFail();
     }
 
     /** List published, open positions. */
@@ -45,9 +81,7 @@ class CareersController extends Controller
     /** A single opening with its required-documents checklist. */
     public function show(string $slug): JsonResponse
     {
-        $opening = JobOpening::with('branch:id,name', 'requirements')
-            ->where('slug', $slug)->where('status', 'open')->whereNotNull('published_at')
-            ->firstOrFail();
+        $opening = $this->publishedOpening($slug, with: ['branch:id,name', 'requirements']);
 
         return response()->json(['opening' => $this->shape($opening, detail: true)]);
     }
@@ -55,9 +89,7 @@ class CareersController extends Controller
     /** Submit an application with attached documents. */
     public function apply(Request $request, string $slug): JsonResponse
     {
-        $opening = JobOpening::with('requirements')
-            ->where('slug', $slug)->where('status', 'open')->whereNotNull('published_at')
-            ->firstOrFail();
+        $opening = $this->publishedOpening($slug, with: ['requirements']);
 
         $validator = Validator::make($request->all(), [
             'first_name' => ['required', 'string', 'max:80'],
@@ -67,13 +99,17 @@ class CareersController extends Controller
             'cover_letter' => ['nullable', 'string', 'max:5000'],
         ]);
 
-        // Every *required* document must be attached; validate each file.
+        // Every *required* document must be attached, and anything attached must be a real
+        // file of an allowed type. The type rules are attached unconditionally rather than
+        // only when hasFile() — otherwise sending `documents[3]=hello` as a plain string
+        // satisfied `required` and skipped the file checks entirely.
+        $fileRules = ['file', 'mimes:pdf,doc,docx,jpg,jpeg,png', 'max:5120'];
+
         foreach ($opening->requirements as $req) {
             $field = "documents.{$req->id}";
-            if ($req->is_required) {
-                $validator->sometimes($field, ['required'], fn () => true);
-            }
-            $validator->sometimes($field, ['file', 'mimes:pdf,doc,docx,jpg,jpeg,png', 'max:5120'], fn () => $request->hasFile($field));
+            $validator->addRules([
+                $field => $req->is_required ? array_merge(['required'], $fileRules) : array_merge(['nullable'], $fileRules),
+            ]);
         }
 
         $validator->setCustomMessages([
@@ -103,7 +139,9 @@ class CareersController extends Controller
         foreach ($opening->requirements as $req) {
             $file = $request->file("documents.{$req->id}");
             if ($file) {
-                $path = $file->store("recruitment/{$opening->id}/{$application->id}", 'public');
+                // Applicant CVs and government IDs. This is an UNAUTHENTICATED upload —
+                // it must never land anywhere the web server will serve directly.
+                $path = $file->store("recruitment/{$opening->id}/{$application->id}", PrivateFile::DISK);
                 $application->documents()->create([
                     'job_opening_requirement_id' => $req->id,
                     'label' => $req->name,

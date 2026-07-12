@@ -49,6 +49,8 @@ class EmployeeSeeder extends Seeder
         static $seq = 1000;
         $seq++;
 
+        $hired = $faker->dateTimeBetween('-6 years', '-2 months');
+
         return [
             'branch_id' => $branch->id,
             'company_id' => $company->id,
@@ -65,7 +67,11 @@ class EmployeeSeeder extends Seeder
             'address' => $faker->address(),
             'employment_type' => $type,
             'status' => $status,
-            'date_hired' => $faker->dateTimeBetween('-6 years', '-2 months')->format('Y-m-d'),
+            'date_hired' => $hired->format('Y-m-d'),
+            // Someone who has left must carry an end date — turnover analytics reads it.
+            'date_ended' => $status === 'resigned'
+                ? $faker->dateTimeBetween($hired, 'now')->format('Y-m-d')
+                : null,
             'basic_salary' => $faker->numberBetween(18000, 90000),
             'tin' => $faker->numerify('###-###-###'),
             'sss' => $faker->numerify('##-#######-#'),

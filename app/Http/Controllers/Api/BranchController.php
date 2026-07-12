@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\Auditor;
 use App\Models\Branch;
 use App\Models\WorkSchedule;
 use Illuminate\Http\JsonResponse;
@@ -34,12 +35,17 @@ class BranchController extends Controller
         // Give the creator access to the branch they just made.
         $request->user()->branches()->syncWithoutDetaching([$branch->id]);
 
+        Auditor::record('branches', 'created', "Created branch {$branch->name}.", $branch, null, $branch->id);
+
         return response()->json(['message' => 'Branch created.', 'branch' => $this->shape($branch->loadCount('employees')->load('schedules'))], 201);
     }
 
     public function update(Request $request, Branch $branch): JsonResponse
     {
+        $before = Auditor::before($branch);
         $branch->update($this->validateBranch($request, $branch->id));
+
+        Auditor::record('branches', 'updated', "Updated branch {$branch->name}.", $branch, Auditor::diff($branch, $before), $branch->id);
 
         return response()->json(['message' => 'Branch updated.', 'branch' => $this->shape($branch->fresh()->loadCount('employees')->load('schedules'))]);
     }
@@ -49,6 +55,8 @@ class BranchController extends Controller
         if ($branch->employees()->exists()) {
             return response()->json(['message' => 'This branch still has employees. Transfer them before archiving it.'], 422);
         }
+        Auditor::record('branches', 'deleted', "Archived branch {$branch->name}.", $branch, null, $branch->id);
+
         $branch->delete();
 
         return response()->json(['message' => 'Branch archived.']);

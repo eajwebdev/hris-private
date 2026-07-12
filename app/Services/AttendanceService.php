@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\WorkSchedule;
+use App\Support\PrivateFile;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 
@@ -39,7 +40,7 @@ class AttendanceService
         if (($payload['photo'] ?? null) instanceof UploadedFile) {
             $photoPath = $payload['photo']->store(
                 "attendance/{$employee->branch_id}/{$employee->id}/{$date}",
-                'public'
+                PrivateFile::DISK
             );
         }
 

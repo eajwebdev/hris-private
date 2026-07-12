@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToBranch;
+use App\Support\PrivateFile;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -59,8 +60,9 @@ class Attendance extends Model
                 'out' => $outs[$i] ?? null,
                 'in_coord' => $inCoords[$i] ?? null,
                 'out_coord' => $outCoords[$i] ?? null,
-                'in_photo' => isset($inPhotos[$i]) ? asset('storage/' . $inPhotos[$i]) : null,
-                'out_photo' => isset($outPhotos[$i]) ? asset('storage/' . $outPhotos[$i]) : null,
+                // Photos of staff at their desk — private disk, signed link per render.
+                'in_photo' => PrivateFile::url($inPhotos[$i] ?? null),
+                'out_photo' => PrivateFile::url($outPhotos[$i] ?? null),
             ];
         }
 

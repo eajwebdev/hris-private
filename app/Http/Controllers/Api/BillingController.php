@@ -3,17 +3,27 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\Auditor;
 use App\Models\Branch;
 use App\Models\Employee;
 use App\Models\Invoice;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\Notifier;
+use App\Services\SubscriptionStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+/**
+ * The tenant's subscription to this system — NOT employee payroll (see PayrollController).
+ *
+ * HR Admin gets read-only access so they can see what's owed and by when. Only the
+ * SuperAdmin (system owner) sets the plan/due date, issues invoices, and records
+ * payment; those routes carry the `superadmin` middleware.
+ */
 class BillingController extends Controller
 {
-    /** Current plan, usage snapshot, and invoice history. */
+    /** Current plan, usage snapshot, invoice history, and payment standing. */
     public function index(Request $request): JsonResponse
     {
         $companyId = $request->user()->company_id;
@@ -23,14 +33,39 @@ class BillingController extends Controller
             ->get()->map(fn ($i) => $this->shape($i));
 
         return response()->json([
-            'plan' => $this->plan(),
+            'plan' => $this->plan($companyId),
             'usage' => [
                 'active_users' => User::where('company_id', $companyId)->where('is_active', true)->count(),
-                'employees' => $this->billableEmployees(),
+                'employees' => $this->billableEmployees($companyId),
                 'branches' => Branch::where('company_id', $companyId)->count(),
             ],
             'invoices' => $invoices,
             'outstanding' => (float) Invoice::where('company_id', $companyId)->whereIn('status', ['unpaid', 'overdue'])->sum('amount'),
+            'status' => $this->notice($request)->getData(true),
+        ]);
+    }
+
+    /**
+     * Lightweight payment standing for the app-wide banner. Read-only, so HR Admin can
+     * poll it without the full billing payload.
+     */
+    public function notice(Request $request): JsonResponse
+    {
+        $status = SubscriptionStatus::for($request->user()->company_id);
+
+        return response()->json([
+            'stage' => $status['stage'],
+            'type' => $status['type'],
+            'title' => $status['title'],
+            'body' => $status['body'],
+            'amount' => $status['amount'],
+            'days_until_due' => $status['days_until_due'],
+            'days_overdue' => $status['days_overdue'],
+            'grace_days_left' => $status['grace_days_left'],
+            'invoice_number' => $status['invoice']?->number,
+            'due_at' => $status['invoice']?->due_at?->toDateString(),
+            // Non-payment never restricts the tenant; the UI should warn, not gate.
+            'restricts_access' => false,
         ]);
     }
 
@@ -51,7 +86,7 @@ class BillingController extends Controller
             'billing_next_at' => $data['next_billing_at'] ?? '',
         ]);
 
-        return response()->json(['message' => 'Plan updated.', 'plan' => $this->plan()]);
+        return response()->json(['message' => 'Plan updated.', 'plan' => $this->plan($request->user()->company_id)]);
     }
 
     /** Auto-generate an invoice for the current period: rate × billable employees. */
@@ -59,7 +94,7 @@ class BillingController extends Controller
     {
         $companyId = $request->user()->company_id;
         $rate = (float) Setting::get('billing_rate_per_employee', 50);
-        $employees = $this->billableEmployees();
+        $employees = $this->billableEmployees($companyId);
         $cycle = Setting::get('billing_cycle', 'monthly');
         $months = $cycle === 'annually' ? 12 : 1;
         $amount = round($rate * $employees * $months, 2);
@@ -74,15 +109,23 @@ class BillingController extends Controller
             'currency' => Setting::get('company_currency', 'PHP'),
             'status' => 'unpaid',
             'issued_at' => now()->toDateString(),
-            'due_at' => now()->addDays(15)->toDateString(),
+            'due_at' => now()->addDays((int) config('hris.billing.invoice_due_days', 15))->toDateString(),
         ]);
 
         return response()->json(['message' => "Invoice generated: {$employees} employees × " . number_format($rate, 2) . '.', 'invoice' => $this->shape($invoice)], 201);
     }
 
-    private function billableEmployees(): int
+    /**
+     * Headcount we bill for. Global scopes are dropped because the owner issues invoices
+     * across tenants, so the company filter has to be explicit — without it this counts
+     * every employee in the database and over-bills every tenant.
+     */
+    private function billableEmployees(int $companyId): int
     {
-        return Employee::withoutGlobalScopes()->whereIn('status', ['regular', 'probationary'])->count();
+        return Employee::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->whereIn('status', ['regular', 'probationary'])
+            ->count();
     }
 
     public function storeInvoice(Request $request): JsonResponse
@@ -105,14 +148,33 @@ class BillingController extends Controller
         return response()->json(['message' => 'Invoice created.', 'invoice' => $this->shape($invoice)], 201);
     }
 
+    /** Owner-only (see `superadmin` middleware): records that a tenant has settled up. */
     public function markPaid(Request $request, Invoice $invoice): JsonResponse
     {
-        abort_unless($invoice->company_id === $request->user()->company_id, 404);
+        // The owner bills every tenant, so they may settle an invoice outside their own
+        // company; nobody else can reach this route at all.
+        abort_unless(
+            $request->user()->isSuperAdmin() || $invoice->company_id === $request->user()->company_id,
+            404
+        );
+
         if ($invoice->status === 'paid') {
             return response()->json(['message' => 'This invoice is already paid.'], 422);
         }
 
+        $before = Auditor::before($invoice);
         $invoice->update(['status' => 'paid', 'paid_at' => now()]);
+
+        Auditor::record('billing', 'paid', "Marked invoice {$invoice->number} as paid.", $invoice, Auditor::diff($invoice, $before));
+
+        // Close the loop for the HR Admins who were being chased for this.
+        Notifier::toUsers(SubscriptionStatus::recipients($invoice->company_id), [
+            'type' => 'billing',
+            'title' => 'Subscription payment received',
+            'body' => "Invoice {$invoice->number} is settled. Thank you!",
+            'link' => '/billing',
+            'icon' => 'credit-card',
+        ]);
 
         return response()->json(['message' => 'Invoice marked as paid.', 'invoice' => $this->shape($invoice)]);
     }
@@ -125,11 +187,11 @@ class BillingController extends Controller
         return response()->json(['message' => 'Invoice deleted.']);
     }
 
-    private function plan(): array
+    private function plan(int $companyId): array
     {
         $rate = (float) Setting::get('billing_rate_per_employee', 50);
         $cycle = Setting::get('billing_cycle', 'monthly');
-        $employees = $this->billableEmployees();
+        $employees = $this->billableEmployees($companyId);
         $months = $cycle === 'annually' ? 12 : 1;
 
         return [
@@ -140,6 +202,8 @@ class BillingController extends Controller
             'estimated_total' => round($rate * $employees * $months, 2),
             'next_billing_at' => Setting::get('billing_next_at') ?: null,
             'currency' => Setting::get('company_currency', 'PHP'),
+            'remind_days_before' => (int) config('hris.billing.remind_days_before', 5),
+            'grace_days' => (int) config('hris.billing.grace_days', 5),
         ];
     }
 
