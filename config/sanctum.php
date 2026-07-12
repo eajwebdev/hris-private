@@ -30,12 +30,18 @@ return [
      * This is not a weakening: a cross-site request carries a *different* Origin, so it
      * still never becomes stateful, and CSRF continues to guard the stateful writes.
      */
-    'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', sprintf(
+    /*
+     * `?:` and not env()'s second argument: an env var that is PRESENT BUT EMPTY
+     * (`SANCTUM_STATEFUL_DOMAINS=` — an easy thing to leave in a .env) makes env()
+     * return '', not the default. That would explode() to an empty list, no request
+     * would ever be stateful, and login would 500. Empty must mean "use the default".
+     */
+    'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS') ?: sprintf(
         '%s,%s,%s',
         'localhost,localhost:3000,127.0.0.1,127.0.0.1:8000,::1',
         Sanctum::currentApplicationUrlWithPort(),
         Sanctum::currentRequestHost(),
-    ))),
+    )),
 
     /*
     |--------------------------------------------------------------------------
